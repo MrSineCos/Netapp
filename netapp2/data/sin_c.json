@@ -1,0 +1,33 @@
+{
+  "name": "sin_c",
+  "host": "sin",
+  "members": [
+    "sin"
+  ],
+  "messages": [
+    {
+      "sender": "sin",
+      "content": "hi from sin",
+      "channel": "sin_c",
+      "timestamp": "2025-04-13T00:22:51.206609"
+    },
+    {
+      "sender": "sin",
+      "content": "hi from sin",
+      "channel": "sin_c",
+      "timestamp": "2025-04-13T00:25:53.562597"
+    },
+    {
+      "sender": "sin",
+      "content": "hi to all",
+      "channel": "sin_c",
+      "timestamp": "2025-04-13T00:30:20.067813"
+    },
+    {
+      "sender": "sin",
+      "content": "hi to all",
+      "channel": "sin_c",
+      "timestamp": "2025-04-13T00:31:51.526445"
+    }
+  ]
+}

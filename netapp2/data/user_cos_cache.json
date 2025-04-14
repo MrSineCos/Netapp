@@ -1,0 +1,24 @@
+{
+  "channels": [
+    "sin_c"
+  ],
+  "hosted_channels": [],
+  "channel_data": {
+    "sin_c": {
+      "name": "sin_c",
+      "host": "sin",
+      "members": [
+        "sin"
+      ],
+      "messages": [
+        {
+          "sender": "sin",
+          "content": "hi from sin",
+          "channel": "sin_c",
+          "timestamp": "2025-04-13T00:22:51.206609"
+        }
+      ]
+    }
+  },
+  "offline_messages": {}
+}

@@ -1,0 +1,16 @@
+Phân quyền:
+- Visitor:
+
+- User:
++ Xem lịch sử chat:
++ Liệt kê user:
++ List_all (liệt kê kênh):
++ leave kênh:
++ Tạo kênh:
++ Join kênh: 
++ Chat trong kênh:
+    - Sở hữu:
+    - Tham gia:
++ Đồng bộ tin nhắn trong kênh:
+    - Sở hữu:
+    - Tham gia:

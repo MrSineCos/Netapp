@@ -1,0 +1,5 @@
+12/4:
+Lỗi tin nhắn trong channel này lại nhận được trong channel khác.
+
+13/4:
+- Visitor không 

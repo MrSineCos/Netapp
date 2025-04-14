@@ -1,0 +1,66 @@
+{
+  "channels": [
+    "sin_c",
+    "burz_c"
+  ],
+  "hosted_channels": [
+    "sin_c"
+  ],
+  "channel_data": {
+    "sin_c": {
+      "name": "sin_c",
+      "host": "sin",
+      "members": [
+        "sin"
+      ],
+      "messages": [
+        {
+          "sender": "sin",
+          "content": "hi from sin",
+          "channel": "sin_c",
+          "timestamp": "2025-04-13T00:22:51.206609"
+        },
+        {
+          "sender": "sin",
+          "content": "hi from sin",
+          "channel": "sin_c",
+          "timestamp": "2025-04-13T00:25:53.562597"
+        },
+        {
+          "sender": "sin",
+          "content": "hi to all",
+          "channel": "sin_c",
+          "timestamp": "2025-04-13T00:30:20.067813"
+        },
+        {
+          "sender": "sin",
+          "content": "hi to all",
+          "channel": "sin_c",
+          "timestamp": "2025-04-13T00:31:51.526445"
+        }
+      ]
+    },
+    "burz_c": {
+      "name": "burz_c",
+      "host": "burz",
+      "members": [
+        "burz"
+      ],
+      "messages": [
+        {
+          "sender": "burz",
+          "content": "hello",
+          "channel": "burz_c",
+          "timestamp": "2025-04-13T00:34:59.130523"
+        },
+        {
+          "sender": "burz",
+          "content": "hello",
+          "channel": "burz_c",
+          "timestamp": "2025-04-13T00:34:59.377935"
+        }
+      ]
+    }
+  },
+  "offline_messages": {}
+}

@@ -1,0 +1,32 @@
+{
+  "channels": [
+    "burz_c"
+  ],
+  "hosted_channels": [
+    "burz_c"
+  ],
+  "channel_data": {
+    "burz_c": {
+      "name": "burz_c",
+      "host": "burz",
+      "members": [
+        "burz"
+      ],
+      "messages": [
+        {
+          "sender": "burz",
+          "content": "hello",
+          "channel": "burz_c",
+          "timestamp": "2025-04-13T00:34:59.130523"
+        },
+        {
+          "sender": "burz",
+          "content": "hi",
+          "channel": "burz_c",
+          "timestamp": "2025-04-13T00:38:03.710177"
+        }
+      ]
+    }
+  },
+  "offline_messages": {}
+}
