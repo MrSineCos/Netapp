@@ -1,7 +1,6 @@
 {
   "channels": [
-    "sin_c",
-    "burz_c"
+    "sin_c"
   ],
   "hosted_channels": [
     "sin_c"
@@ -16,48 +15,51 @@
       "messages": [
         {
           "sender": "sin",
-          "content": "hi from sin",
+          "content": "hello from sin",
           "channel": "sin_c",
-          "timestamp": "2025-04-13T00:22:51.206609"
+          "timestamp": "2025-04-16T21:33:20.481369"
         },
         {
           "sender": "sin",
-          "content": "hi from sin",
+          "content": "hi visitor",
           "channel": "sin_c",
-          "timestamp": "2025-04-13T00:25:53.562597"
+          "timestamp": "2025-04-16T21:34:36.464013"
         },
         {
           "sender": "sin",
-          "content": "hi to all",
+          "content": "hi cos",
           "channel": "sin_c",
-          "timestamp": "2025-04-13T00:30:20.067813"
+          "timestamp": "2025-04-16T21:35:50.491137"
         },
         {
           "sender": "sin",
-          "content": "hi to all",
+          "content": "hi visitors",
           "channel": "sin_c",
-          "timestamp": "2025-04-13T00:31:51.526445"
-        }
-      ]
-    },
-    "burz_c": {
-      "name": "burz_c",
-      "host": "burz",
-      "members": [
-        "burz"
-      ],
-      "messages": [
-        {
-          "sender": "burz",
-          "content": "hello",
-          "channel": "burz_c",
-          "timestamp": "2025-04-13T00:34:59.130523"
+          "timestamp": "2025-04-16T21:36:39.738154"
         },
         {
-          "sender": "burz",
-          "content": "hello",
-          "channel": "burz_c",
-          "timestamp": "2025-04-13T00:34:59.377935"
+          "sender": "sin",
+          "content": "hi",
+          "channel": "sin_c",
+          "timestamp": "2025-04-16T21:45:47.348446"
+        },
+        {
+          "sender": "sin",
+          "content": "hi",
+          "channel": "sin_c",
+          "timestamp": "2025-04-16T21:46:16.125914"
+        },
+        {
+          "sender": "sin",
+          "content": "hi cos",
+          "channel": "sin_c",
+          "timestamp": "2025-04-16T22:01:11.979630"
+        },
+        {
+          "sender": "sin",
+          "content": "hi cos",
+          "channel": "sin_c",
+          "timestamp": "2025-04-16T22:01:25.844684"
         }
       ]
     }

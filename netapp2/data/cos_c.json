@@ -1,0 +1,37 @@
+{
+  "name": "cos_c",
+  "host": "cos",
+  "members": [
+    "cos",
+    "sin"
+  ],
+  "visitors": [
+    "visitor"
+  ],
+  "messages": [
+    {
+      "sender": "cos",
+      "content": "hi everyone",
+      "channel": "cos_c",
+      "timestamp": "2025-04-17T00:04:13.062566"
+    },
+    {
+      "sender": "cos",
+      "content": "hi visitor",
+      "channel": "cos_c",
+      "timestamp": "2025-04-17T00:05:19.164863"
+    },
+    {
+      "sender": "sin",
+      "content": "hi cos",
+      "channel": "cos_c",
+      "timestamp": "2025-04-17T00:07:13.262534"
+    },
+    {
+      "sender": "sin",
+      "content": "hi cos",
+      "channel": "cos_c",
+      "timestamp": "2025-04-17T00:07:13.435794"
+    }
+  ]
+}

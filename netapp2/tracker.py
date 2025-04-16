@@ -3,6 +3,7 @@ import socket
 import threading
 import json
 import os
+import time
 from datetime import datetime
 
 class Peer:
@@ -11,6 +12,7 @@ class Peer:
         self.port = port
         self.username = username
         self.status = status
+        self.last_seen = datetime.now()  # Thêm timestamp cho lần cuối cùng peer được thấy
 
     def to_dict(self):
         return {
@@ -28,6 +30,15 @@ class Peer:
             username=data["username"],
             status=data["status"]
         )
+        
+    def update_last_seen(self):
+        self.last_seen = datetime.now()
+        
+    def is_likely_offline(self, timeout_seconds=60):
+        """Kiểm tra xem peer có khả năng offline hay không dựa trên thời gian cuối cùng được thấy"""
+        now = datetime.now()
+        time_diff = (now - self.last_seen).total_seconds()
+        return time_diff > timeout_seconds
 
 # Message class for storing channel messages
 class Message:
@@ -118,6 +129,7 @@ class Channel:
 
 peer_list = []
 channels = {}  # Store channels on the tracker
+peer_lock = threading.Lock()  # Lock for thread-safe access to peer_list
 
 # Load saved channels from disk on startup
 def load_channels():
@@ -139,6 +151,68 @@ def load_channels():
     except Exception as e:
         print(f"[Tracker] Error loading channels: {e}")
 
+def check_peer_status(peer):
+    """Kiểm tra trạng thái của peer bằng cách kết nối tới nó"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3)  # Timeout 3 giây
+        s.connect((peer.ip, int(peer.port)))
+        s.close()
+        return True  # Peer online
+    except Exception:
+        return False  # Peer offline
+
+def update_peer_status():
+    """Cập nhật trạng thái của tất cả các peer theo định kỳ"""
+    while True:
+        try:
+            # Đảm bảo thread-safe khi truy cập peer_list
+            with peer_lock:
+                offline_peers = []
+                for i, peer in enumerate(peer_list):
+                    # Chỉ kiểm tra các peer mà status là "online" hoặc đã lâu không thấy
+                    if peer.status == "online" or peer.is_likely_offline():
+                        # Nếu peer đã lâu không được thấy, kiểm tra trạng thái
+                        if peer.is_likely_offline():
+                            is_online = check_peer_status(peer)
+                            if not is_online and peer.status != "offline":
+                                print(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is now offline")
+                                peer.status = "offline"
+                            elif is_online and peer.status == "offline":
+                                print(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is back online")
+                                peer.status = "online"
+                                peer.update_last_seen()
+                        
+                        # Xóa các peer không còn hoạt động sau một thời gian rất dài (1 giờ)
+                        if (datetime.now() - peer.last_seen).total_seconds() > 3600 and peer.status == "offline":
+                            offline_peers.append(i)
+                
+                # Xóa các peer đã offline quá lâu (từ cuối danh sách để tránh lỗi index)
+                for idx in sorted(offline_peers, reverse=True):
+                    removed_peer = peer_list.pop(idx)
+                    print(f"[Tracker] Removed inactive peer: {removed_peer.username} ({removed_peer.ip}:{removed_peer.port})")
+            
+            # Tạm dừng để tránh dùng quá nhiều CPU
+            time.sleep(30)  # Kiểm tra mỗi 30 giây
+        except Exception as e:
+            print(f"[Tracker] Error in status updating thread: {e}")
+            time.sleep(30)  # Nếu có lỗi, vẫn đợi trước khi thử lại
+
+def ping_peer(peer):
+    """Ping một peer để kiểm tra trạng thái và cập nhật last_seen"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(3)  # Timeout 3 giây
+        s.connect((peer.ip, int(peer.port)))
+        s.send(b"ping\n")
+        response = s.recv(1024).decode().strip()
+        s.close()
+        if response == "pong":
+            return True
+        return False
+    except Exception:
+        return False
+
 def handle_client(conn):
     global peer_list, channels
     try:
@@ -153,22 +227,69 @@ def handle_client(conn):
             
             if cmd == "send_info":
                 ip, port, username, status = parts[1], parts[2], parts[3], parts[4]
-                peer = Peer(ip, port, username, status)
-                # Update or add peer
-                for i, p in enumerate(peer_list):
-                    if p.ip == ip and p.port == port:
-                        peer_list[i] = peer
-                        break
-                else:
-                    peer_list.append(peer)
+                new_peer = Peer(ip, port, username, status)
+                
+                # Đảm bảo thread-safe khi truy cập peer_list
+                with peer_lock:
+                    # Update or add peer
+                    for i, p in enumerate(peer_list):
+                        if p.ip == ip and p.port == port:
+                            # Nếu username thay đổi, cập nhật
+                            if p.username != username:
+                                print(f"[Tracker] Username changed for peer at {ip}:{port} from {p.username} to {username}")
+                                p.username = username
+                            
+                            # Chỉ cập nhật trạng thái nếu peer đã đăng ký là trạng thái khác "offline"
+                            # hoặc nếu trạng thái mới là "online" (peer đang báo là đã online lại)
+                            if status != "offline" or p.status == "offline":
+                                p.status = status
+                            
+                            p.update_last_seen()
+                            print(f"[Tracker] Updated peer {username} at {ip}:{port} with status {p.status}")
+                            break
+                    else:
+                        # Peer mới
+                        peer_list.append(new_peer)
+                        print(f"[Tracker] Registered new peer {username} at {ip}:{port} with status {status}")
+                
                 conn.send(b"OK\n")
-                print(f"[Tracker] Registered peer {username} at {ip}:{port} with status {status}")
                 
             elif cmd == "get_list":
-                # Send peer list as JSON
-                peer_data = [p.to_dict() for p in peer_list]
+                # Đảm bảo thread-safe khi truy cập peer_list
+                with peer_lock:
+                    # Send peer list as JSON
+                    peer_data = [p.to_dict() for p in peer_list]
                 conn.send(json.dumps(peer_data).encode() + b'\n')
                 
+            elif cmd == "ping":
+                # Phản hồi lại ping từ client
+                conn.send(b"pong\n")
+
+            elif cmd == "check_status":
+                # Cho phép client kiểm tra trạng thái của một peer cụ thể
+                if len(parts) < 2:
+                    conn.send(b"ERROR: Missing peer username\n")
+                    continue
+                
+                target_username = parts[1]
+                found = False
+                
+                # Đảm bảo thread-safe khi truy cập peer_list
+                with peer_lock:
+                    for peer in peer_list:
+                        if peer.username == target_username:
+                            # Kiểm tra trạng thái thực tế của peer
+                            is_online = check_peer_status(peer)
+                            if is_online:
+                                conn.send(f"STATUS: {peer.username} is online\n".encode())
+                            else:
+                                conn.send(f"STATUS: {peer.username} is offline\n".encode())
+                            found = True
+                            break
+                
+                if not found:
+                    conn.send(f"ERROR: Peer {target_username} not found\n".encode())
+            
             elif cmd == "sync_channel":
                 # Receive channel data from a host for backup
                 try:
@@ -265,6 +386,11 @@ def handle_client(conn):
 def main():
     # Load channels from disk
     load_channels()
+    
+    # Bắt đầu thread kiểm tra trạng thái
+    status_thread = threading.Thread(target=update_peer_status, daemon=True)
+    status_thread.start()
+    print("[Tracker] Started peer status monitoring thread")
     
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoid bind errors
