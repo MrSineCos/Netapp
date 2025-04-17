@@ -13,12 +13,23 @@ class Message:
         self.timestamp = timestamp or datetime.now().isoformat()
 
     def to_dict(self):
-        return {
-            "sender": self.sender,
-            "content": self.content,
-            "channel": self.channel,
-            "timestamp": self.timestamp
-        }
+        """Chuyển đổi đối tượng Message thành từ điển để serialize thành JSON"""
+        try:
+            return {
+                "sender": str(self.sender),
+                "content": str(self.content),
+                "channel": str(self.channel),
+                "timestamp": str(self.timestamp)
+            }
+        except Exception as e:
+            print(f"[DataManager] Error in Message.to_dict: {e}")
+            # Trả về giá trị an toàn nếu xảy ra lỗi
+            return {
+                "sender": "unknown",
+                "content": "error_content",
+                "channel": "unknown",
+                "timestamp": datetime.now().isoformat()
+            }
 
     @classmethod
     def from_dict(cls, data):
@@ -44,6 +55,15 @@ class Channel:
     def add_message(self, message):
         if isinstance(message, dict):
             message = Message.from_dict(message)
+            
+        # Kiểm tra tin nhắn trùng lặp trước khi thêm
+        for existing_msg in self.messages:
+            if (existing_msg.timestamp == message.timestamp and 
+                existing_msg.sender == message.sender and 
+                existing_msg.content == message.content):
+                print(f"[DataManager] Channel.add_message: Duplicate message detected, not adding: {message.sender}/{message.timestamp}")
+                return existing_msg
+                
         self.messages.append(message)
         return message
 
@@ -98,14 +118,44 @@ class Channel:
         return list(self.members) + list(self.visitors)
         
     def to_dict(self):
-        return {
-            "name": self.name,
-            "host": self.host,
-            "members": list(self.members),
-            "visitors": list(self.visitors),
-            "messages": [m.to_dict() for m in self.messages]
-        }
-        
+        """Chuyển đổi đối tượng Channel thành từ điển để serialize thành JSON"""
+        try:
+            # Tạo ra danh sách tin nhắn an toàn cho JSON serialization
+            messages_list = []
+            for msg in self.messages:
+                try:
+                    # Đảm bảo rằng mỗi tin nhắn đều là dictionary hợp lệ
+                    msg_dict = {
+                        "sender": str(msg.sender),
+                        "content": str(msg.content),
+                        "channel": str(msg.channel),
+                        "timestamp": str(msg.timestamp)
+                    }
+                    messages_list.append(msg_dict)
+                except Exception as e:
+                    print(f"[DataManager] Error converting message to dict: {e}")
+                    # Bỏ qua tin nhắn lỗi
+                    continue
+            
+            # Chuyển đổi sets thành lists để JSON serialization
+            return {
+                "name": str(self.name),
+                "host": str(self.host),
+                "members": [str(m) for m in self.members],
+                "visitors": [str(v) for v in self.visitors],
+                "messages": messages_list
+            }
+        except Exception as e:
+            print(f"[DataManager] Error in Channel.to_dict: {e}")
+            # Trả về cấu trúc tối giản nếu xảy ra lỗi
+            return {
+                "name": str(self.name),
+                "host": str(self.host),
+                "members": [],
+                "visitors": [],
+                "messages": []
+            }
+
     def debug_info(self):
         """Return debug info about channel"""
         return f"Channel {self.name}: Host={self.host}, Members={self.members}, Visitors={self.visitors}, Messages={len(self.messages)}"
@@ -279,8 +329,18 @@ class DataManager:
             if not channel.can_write(sender):
                 print(f"[DataManager] User {sender} does not have permission to write to channel {channel_name}")
                 return None
+            
+            # Kiểm tra trùng lặp tin nhắn dựa trên timestamp
+            msg_timestamp = timestamp or datetime.now().isoformat()
+            
+            # Kiểm tra nếu tin nhắn với timestamp này đã tồn tại
+            for existing_msg in channel.messages:
+                if existing_msg.timestamp == msg_timestamp and existing_msg.sender == sender and existing_msg.content == content:
+                    print(f"[DataManager] Duplicate message detected, not adding: {sender}/{msg_timestamp}")
+                    return existing_msg
                 
-            message = Message(sender, content, channel_name, timestamp)
+            # Tạo và thêm tin nhắn mới nếu không trùng lặp
+            message = Message(sender, content, channel_name, msg_timestamp)
             channel.add_message(message)
             self.save_channel(channel_name)
             return message
@@ -479,3 +539,20 @@ class DataManager:
                 
             if username in self.offline_messages:
                 self.offline_messages[username] = {} 
+            
+    def clear_offline_messages(self, username):
+        """Clear offline messages for a user after syncing"""
+        with self._lock:
+            if username in self.offline_messages:
+                self.offline_messages[username] = {}
+                
+            # Xóa file offline nếu tồn tại
+            filepath = os.path.join(DATA_DIR, f"user_{username}_offline.json")
+            if os.path.exists(filepath):
+                try:
+                    os.remove(filepath)
+                    print(f"[DataManager] Removed offline messages file for {username}")
+                except Exception as e:
+                    print(f"[DataManager] Error removing offline messages file: {e}")
+            
+            return True 

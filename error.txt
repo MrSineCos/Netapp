@@ -2,4 +2,13 @@
 Lỗi tin nhắn trong channel này lại nhận được trong channel khác.
 
 13/4:
-- Visitor không 
+- client trong cùng một kênh lại không giao tiếp được với nhau
+
+16/4:
+- Visitor không read-only messages trong các kênh mà các peer gửi (theo yêu cầu btl, visitors có quyền read-only các kênh)
+
+17/4:
+- Việc chạy mô phỏng giữa các client chưa hoàn toàn chính xác do sử dụng cùng một file json 
+-> Cần có các file riêng biệt giữa các client với nhau và với tracker, trong đó:
+    + Giữa các client: cần lưu trữ riêng thông tin về kênh
+- Các client chưa có file lưu trữ thông tin chat từ các kênh tham gia do đó chưa có cơ chế lưu tin nhắn để đồng bộ với server khi online.

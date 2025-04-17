@@ -293,37 +293,135 @@ def handle_client(conn):
             elif cmd == "sync_channel":
                 # Receive channel data from a host for backup
                 try:
-                    channel_json = " ".join(parts[1:])
-                    channel_data = json.loads(channel_json)
+                    # Read the initial data
+                    buffer = data.strip()
+                    
+                    # Find where the JSON starts
+                    json_start = buffer.find('{')
+                    if json_start == -1:
+                        conn.send(b"ERROR: Invalid JSON format\n")
+                        continue
+                    
+                    # Extract the command prefix and JSON part
+                    command_prefix = buffer[:json_start].strip()
+                    json_buffer = buffer[json_start:]
+                    
+                    # Check if JSON is complete by counting brackets
+                    open_braces = json_buffer.count('{')
+                    close_braces = json_buffer.count('}')
+                    
+                    # If JSON is incomplete, keep reading until it's complete
+                    while open_braces > close_braces:
+                        print(f"[Tracker] JSON incomplete, reading more data ({open_braces} vs {close_braces})")
+                        
+                        # Set a timeout for the socket to avoid hanging
+                        conn.settimeout(5.0)
+                        try:
+                            more_data = conn.recv(4096).decode()
+                            if not more_data:
+                                break
+                            
+                            json_buffer += more_data
+                            open_braces = json_buffer.count('{')
+                            close_braces = json_buffer.count('}')
+                        except socket.timeout:
+                            print("[Tracker] Timeout while reading JSON data")
+                            break
+                    
+                    # Reset timeout
+                    conn.settimeout(None)
+                    
+                    # Now try to parse the complete JSON
+                    print(f"[Tracker] Received complete JSON data ({len(json_buffer)} bytes)")
+                    channel_data = json.loads(json_buffer)
                     channel_name = channel_data["name"]
                     
                     print(f"[Tracker] Received sync request for channel {channel_name}")
+                    
+                    # Kiểm tra xem sender có phải là host không
+                    sender_is_host = False
+                    sender_ip = conn.getpeername()[0]
+                    sender_port = None
+                    sender_username = None
+                    
+                    with peer_lock:
+                        for peer in peer_list:
+                            if peer.ip == sender_ip:
+                                sender_username = peer.username
+                                sender_port = peer.port
+                                break
+                    
+                    print(f"[Tracker] Sync request from {sender_username if sender_username else 'unknown'} ({sender_ip})")
+                    
+                    # Check if sender is the host
+                    if channel_name in channels:
+                        if sender_username and sender_username == channels[channel_name].host:
+                            sender_is_host = True
+                            print(f"[Tracker] Sender is the host of channel {channel_name}")
                     
                     if channel_name not in channels:
                         print(f"[Tracker] Creating new channel {channel_name} from sync")
                         channels[channel_name] = Channel(channel_name, channel_data["host"])
                     
-                    # Update channel data
-                    channels[channel_name].host = channel_data["host"]
-                    
-                    # Ensure host is a member
-                    if channel_data["host"] and channel_data["host"] != "visitor":
-                        channels[channel_name].members.add(channel_data["host"])
-                    
-                    # Add other members
-                    if "members" in channel_data:
-                        for member in channel_data["members"]:
-                            if member and member != "visitor":
-                                channels[channel_name].members.add(member)
-                    
-                    # Add new messages
-                    if "messages" in channel_data and channel_data["messages"]:
-                        for msg in channel_data["messages"]:
+                    # Nếu người gửi không phải là host, chỉ thêm tin nhắn mới
+                    # Giữ nguyên thông tin host và members
+                    if not sender_is_host:
+                        print(f"[Tracker] Non-host sync from {sender_username}, preserving host and member data")
+                        
+                        # Cho phép client không phải host đồng bộ tin nhắn bất kể host có online hay không
+                        host_is_online = False
+                        host_username = channels[channel_name].host
+                        
+                        if host_username:
+                            with peer_lock:
+                                for peer in peer_list:
+                                    if peer.username == host_username and peer.status == "online":
+                                        host_is_online = True
+                                        break
+                        
+                        if host_is_online:
+                            print(f"[Tracker] Host {host_username} is online, but accepting non-host message sync")
+                        
+                        # Chỉ thêm tin nhắn mới từ client không phải host
+                        if "messages" in channel_data and channel_data["messages"]:
+                            # Lấy các timestamp hiện có
+                            existing_timestamps = set()
+                            for msg in channels[channel_name].messages:
+                                existing_timestamps.add(msg.timestamp)
+                            
+                            # Thêm các tin nhắn chưa có
+                            new_messages = 0
+                            for msg in channel_data["messages"]:
+                                if msg.get("timestamp") not in existing_timestamps:
+                                    channels[channel_name].add_message(msg)
+                                    new_messages += 1
+                            
+                            print(f"[Tracker] Added {new_messages} new messages from non-host client {sender_username}")
+                    else:
+                        # Update channel data
+                        channels[channel_name].host = channel_data["host"]
+                        
+                        # Ensure host is a member
+                        if channel_data["host"] and channel_data["host"] != "visitor":
+                            channels[channel_name].members.add(channel_data["host"])
+                        
+                        # Add other members
+                        if "members" in channel_data:
+                            for member in channel_data["members"]:
+                                if member and member != "visitor":
+                                    channels[channel_name].members.add(member)
+                        
+                        # Add new messages
+                        if "messages" in channel_data and channel_data["messages"]:
                             # Check if message is already in channel by timestamp
                             timestamps = [m.timestamp for m in channels[channel_name].messages]
-                            if msg.get("timestamp") not in timestamps:
-                                channels[channel_name].add_message(msg)
-                                print(f"[Tracker] Added message from {msg['sender']} to channel {channel_name}")
+                            new_messages = 0
+                            for msg in channel_data["messages"]:
+                                if msg.get("timestamp") not in timestamps:
+                                    channels[channel_name].add_message(msg)
+                                    new_messages += 1
+                            
+                            print(f"[Tracker] Added {new_messages} messages from host {sender_username}")
                     
                     # Save to disk
                     channels[channel_name].save_to_disk()

@@ -1,0 +1,61 @@
+*Phân quyền và các chức năng cơ bản (dưới dạng CLI)
+- Visitor:
+    + Read-only: ok
+    + Join kênh: ok
+    + Leave kênh:
+    + history chat: ? (phân vân ko bik có nên thêm vô ko)
+    + Liệt kê user (danh sách và state user): ok
+    + List_all (liệt kê channels): ok
+    + Thoát chương trình: ok
+- User:
+    + chat: 
+        - Nhận:
+            + Client host: ok
+            + Client peer (các client trong cùng kênh với người nhận): ok
+        - Gửi:
+            + Client host: ok
+            + Client peer (các client trong cùng kênh với người nhận): ok
+            + Visitor (cho phép xem hay không):
+    + Xem lịch sử chat của kênh:
+        - Sở hữu: ok
+        - Tham gia: 
+            + online (lấy từ client host): ok
+            + offline (lấy từ tracker): ok
+    + Liệt kê user: ok
+    + List_all (liệt kê kênh): ok
+    + leave kênh: ok
+    + Tạo kênh: ok
+    + Join kênh: ok
+    + Đồng bộ tin nhắn trong kênh:
+        - Khi online:
+            + Sở hữu: ok
+            + Tham gia:
+                - Đồng bộ lên tracker: ok
+                - Đồng bộ từ tracker xuống: ok
+        - Từ offline -> online:
+            + Sở hữu:
+                - Đồng bộ lên tracker: ok
+                - Đồng bộ từ tracker xuống: ok
+            + Tham gia: 
+                - Đồng bộ lên tracker: ok
+                - Đồng bộ từ tracker xuống:
+        - Chỉ có tin nhắn còn thiếu hoặc chưa được cập nhật thì mới được thêm vào: ok ?
+    + Streaming: ok?
+
+
+* Các phi chức năng:
+- Giao diện (UI):
+    + Ô nhập chat:
+    + Hiển thị nội dung trò chuyện:
+    + Danh sách kênh:
+    + Tiêu đề kênh được chọn:
+    + Danh sách người dùng:
+    + Trạng thái người dùng:
+    + Thông báo:
+        - Tin nhắn nhận được từ kênh nào
+        - Tin nhắn gửi success or fail
+        - Kênh join/create success or fail
+        - Đồng bộ hay chưa đồng bộ
+    + Nút tạo/rời kênh, nhập tên kênh muốn tạo.
+- Cân bằng tải:
+    + Streaming:
