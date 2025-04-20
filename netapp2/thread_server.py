@@ -56,6 +56,8 @@ def handle_peer(conn, username_fn):
                             channel_name = message_data["channel"]
                             content = message_data["content"]
                             sender = message_data["sender"]
+                            # Extract timestamp from the message data if available
+                            timestamp = message_data.get("timestamp")
                             
                             channel = data_manager.get_channel(channel_name)
                             if not channel:
@@ -72,13 +74,14 @@ def handle_peer(conn, username_fn):
                                 print(f"[DEBUG] Auto-added {sender} as member to channel {channel_name}")
                             
                             if channel.can_write(sender):
-                                message = data_manager.add_message(channel_name, sender, content)
+                                # Use the provided timestamp to maintain consistency across clients
+                                message = data_manager.add_message(channel_name, sender, content, timestamp)
                                 
                                 # If we're the host, store the message
                                 if channel.is_host(username):
-                                    print(f"[{channel_name}] {sender}: {content} (stored)")
+                                    print(f"[{channel_name}] {sender}: {content} (stored) [timestamp: {timestamp}]")
                                     
-                                    # As host, forward to all other members/visitors
+                                    # As host, forward to all other members/visitors with the same timestamp
                                     try:
                                         # Get updated peer list
                                         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -94,8 +97,10 @@ def handle_peer(conn, username_fn):
                                                 for peer in peers:
                                                     if peer["username"] == recipient:
                                                         try:
+                                                            # Make sure we're forwarding the original message_data 
+                                                            # with its timestamp preserved
                                                             send_to_peer(peer["ip"], int(peer["port"]), json.dumps(message_data))
-                                                            print(f"[DEBUG] Host forwarded message to {recipient}")
+                                                            print(f"[DEBUG] Host forwarded message to {recipient} with timestamp {timestamp}")
                                                         except Exception as e:
                                                             print(f"[Error forwarding message to {recipient}]: {e}")
                                                         break

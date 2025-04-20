@@ -8,6 +8,7 @@ import getpass
 import hashlib
 import time
 from datetime import datetime
+from chat_ui import run_chat_ui
 
 # User authentication data
 USER_DATA_FILE = "data/users.json"
@@ -100,8 +101,8 @@ def send_command_and_wait(command_queue, response_queue, cmd, timeout=10):
     while time.time() - start_time < timeout:
         if not response_queue.empty():
             response = response_queue.get()
-            print(f"[CLI] Received response: {response}")
-            if response == "done":
+            if response:
+                print(f"[CLI] Received response: {response}")
                 return True
         time.sleep(0.1)
     
@@ -224,7 +225,9 @@ def main():
     agent_proc.start()
 
     # CLI handles command input
-    cli_loop(command_queue, response_queue)
+    # cli_loop(command_queue, response_queue)
+    # --- Thay thế CLI bằng giao diện UI ---
+    run_chat_ui(command_queue, response_queue)
 
     agent_proc.join()
 

@@ -1,0 +1,24 @@
+{
+  "name": "sin_c",
+  "host": "sin",
+  "members": [
+    "sin"
+  ],
+  "visitors": [],
+  "messages": [
+    {
+      "sender": "sin",
+      "content": "halo 12:02",
+      "channel": "sin_c",
+      "timestamp": "2025-04-21 00:02:09.315407",
+      "status": "sent"
+    },
+    {
+      "sender": "sin",
+      "content": "hi 12:02",
+      "channel": "sin_c",
+      "timestamp": "2025-04-21 00:02:46.080885",
+      "status": "sent"
+    }
+  ]
+}

@@ -83,6 +83,14 @@ class Channel:
             message_data.get("timestamp")
         )
         self.messages.append(message)
+        
+        # Sắp xếp tin nhắn theo thời gian sau khi thêm
+        try:
+            self.messages.sort(key=lambda msg: msg.timestamp)
+            print(f"[Tracker] Messages sorted by timestamp after adding new message to channel {self.name}")
+        except Exception as e:
+            print(f"[Tracker] Error sorting messages: {e}")
+            
         print(f"[Tracker] Added message from {message.sender} to channel {self.name}")
         self.save_to_disk()
         return message
@@ -123,6 +131,14 @@ class Channel:
                 channel = cls(data["name"], data["host"])
                 channel.members = set(data["members"])
                 channel.messages = [Message.from_dict(m) for m in data["messages"]]
+                
+                # Sắp xếp tin nhắn theo thời gian
+                try:
+                    channel.messages.sort(key=lambda msg: msg.timestamp)
+                    print(f"[Tracker] Messages sorted by timestamp after loading channel {channel_name}")
+                except Exception as e:
+                    print(f"[Tracker] Error sorting messages for channel {channel_name}: {e}")
+                
                 return channel
         except (FileNotFoundError, json.JSONDecodeError):
             return None
@@ -130,6 +146,7 @@ class Channel:
 peer_list = []
 channels = {}  # Store channels on the tracker
 peer_lock = threading.Lock()  # Lock for thread-safe access to peer_list
+channel_lock = threading.RLock()  # Lock for thread-safe access to channels (RLock allows recursive locking)
 
 # Load saved channels from disk on startup
 def load_channels():
@@ -146,8 +163,9 @@ def load_channels():
                 channel_name = filename[:-5]  # Remove .json extension
                 channel = Channel.load_from_disk(channel_name)
                 if channel:
-                    channels[channel_name] = channel
-                    print(f"[Tracker] Loaded channel {channel_name} with {len(channel.messages)} messages")
+                    with channel_lock:
+                        channels[channel_name] = channel
+                        print(f"[Tracker] Loaded channel {channel_name} with {len(channel.messages)} messages")
     except Exception as e:
         print(f"[Tracker] Error loading channels: {e}")
 
@@ -220,6 +238,27 @@ def handle_client(conn):
             data = conn.recv(1024).decode()
             if not data:
                 break
+            # --- Bổ sung: Kiểm tra nếu là JSON (join_channel) ---
+            if data.strip().startswith("{"):
+                try:
+                    msg = json.loads(data.strip())
+                    if msg.get("type") == "join_channel":
+                        channel_name = msg.get("channel")
+                        username = msg.get("username")
+                        with channel_lock:
+                            if channel_name in channels and username:
+                                channels[channel_name].add_member(username)
+                                print(f"[Tracker] Added member {username} to channel {channel_name} via join_channel")
+                                channels[channel_name].save_to_disk()
+                                conn.send(b"OK\n")
+                            else:
+                                conn.send(b"ERROR: Channel not found or invalid username\n")
+                        continue
+                except Exception as e:
+                    print(f"[Tracker] Error processing join_channel: {e}")
+                    conn.send(b"ERROR: Invalid join_channel message\n")
+                    continue
+            # --- Kết thúc bổ sung ---
             parts = data.strip().split()
             if not parts:
                 continue
@@ -227,6 +266,10 @@ def handle_client(conn):
             
             if cmd == "send_info":
                 ip, port, username, status = parts[1], parts[2], parts[3], parts[4]
+                # Kiểm tra nếu có "get_peers" ở cuối lệnh
+                get_peers = False
+                if len(parts) > 5 and parts[5] == "get_peers":
+                    get_peers = True
                 new_peer = Peer(ip, port, username, status)
                 
                 # Đảm bảo thread-safe khi truy cập peer_list
@@ -252,7 +295,13 @@ def handle_client(conn):
                         peer_list.append(new_peer)
                         print(f"[Tracker] Registered new peer {username} at {ip}:{port} with status {status}")
                 
-                conn.send(b"OK\n")
+                if get_peers:
+                    # Trả về danh sách peers ngay lập tức
+                    with peer_lock:
+                        peer_data = [p.to_dict() for p in peer_list]
+                    conn.send(json.dumps(peer_data).encode() + b'\n')
+                else:
+                    conn.send(b"OK\n")
                 
             elif cmd == "get_list":
                 # Đảm bảo thread-safe khi truy cập peer_list
@@ -353,80 +402,82 @@ def handle_client(conn):
                     
                     print(f"[Tracker] Sync request from {sender_username if sender_username else 'unknown'} ({sender_ip})")
                     
-                    # Check if sender is the host
-                    if channel_name in channels:
-                        if sender_username and sender_username == channels[channel_name].host:
-                            sender_is_host = True
-                            print(f"[Tracker] Sender is the host of channel {channel_name}")
-                    
-                    if channel_name not in channels:
-                        print(f"[Tracker] Creating new channel {channel_name} from sync")
-                        channels[channel_name] = Channel(channel_name, channel_data["host"])
-                    
-                    # Nếu người gửi không phải là host, chỉ thêm tin nhắn mới
-                    # Giữ nguyên thông tin host và members
-                    if not sender_is_host:
-                        print(f"[Tracker] Non-host sync from {sender_username}, preserving host and member data")
+                    # Sử dụng channel_lock để đảm bảo thread-safe khi truy cập và sửa đổi channels
+                    with channel_lock:
+                        # Check if sender is the host
+                        if channel_name in channels:
+                            if sender_username and sender_username == channels[channel_name].host:
+                                sender_is_host = True
+                                print(f"[Tracker] Sender is the host of channel {channel_name}")
                         
-                        # Cho phép client không phải host đồng bộ tin nhắn bất kể host có online hay không
-                        host_is_online = False
-                        host_username = channels[channel_name].host
+                        if channel_name not in channels:
+                            print(f"[Tracker] Creating new channel {channel_name} from sync")
+                            channels[channel_name] = Channel(channel_name, channel_data["host"])
                         
-                        if host_username:
-                            with peer_lock:
-                                for peer in peer_list:
-                                    if peer.username == host_username and peer.status == "online":
-                                        host_is_online = True
-                                        break
-                        
-                        if host_is_online:
-                            print(f"[Tracker] Host {host_username} is online, but accepting non-host message sync")
-                        
-                        # Chỉ thêm tin nhắn mới từ client không phải host
-                        if "messages" in channel_data and channel_data["messages"]:
-                            # Lấy các timestamp hiện có
-                            existing_timestamps = set()
-                            for msg in channels[channel_name].messages:
-                                existing_timestamps.add(msg.timestamp)
+                        # Nếu người gửi không phải là host, chỉ thêm tin nhắn mới
+                        # Giữ nguyên thông tin host và members
+                        if not sender_is_host:
+                            print(f"[Tracker] Non-host sync from {sender_username}, preserving host and member data")
                             
-                            # Thêm các tin nhắn chưa có
-                            new_messages = 0
-                            for msg in channel_data["messages"]:
-                                if msg.get("timestamp") not in existing_timestamps:
-                                    channels[channel_name].add_message(msg)
-                                    new_messages += 1
+                            # Cho phép client không phải host đồng bộ tin nhắn bất kể host có online hay không
+                            host_is_online = False
+                            host_username = channels[channel_name].host
                             
-                            print(f"[Tracker] Added {new_messages} new messages from non-host client {sender_username}")
-                    else:
-                        # Update channel data
-                        channels[channel_name].host = channel_data["host"]
-                        
-                        # Ensure host is a member
-                        if channel_data["host"] and channel_data["host"] != "visitor":
-                            channels[channel_name].members.add(channel_data["host"])
-                        
-                        # Add other members
-                        if "members" in channel_data:
-                            for member in channel_data["members"]:
-                                if member and member != "visitor":
-                                    channels[channel_name].members.add(member)
-                        
-                        # Add new messages
-                        if "messages" in channel_data and channel_data["messages"]:
-                            # Check if message is already in channel by timestamp
-                            timestamps = [m.timestamp for m in channels[channel_name].messages]
-                            new_messages = 0
-                            for msg in channel_data["messages"]:
-                                if msg.get("timestamp") not in timestamps:
-                                    channels[channel_name].add_message(msg)
-                                    new_messages += 1
+                            if host_username:
+                                with peer_lock:
+                                    for peer in peer_list:
+                                        if peer.username == host_username and peer.status == "online":
+                                            host_is_online = True
+                                            break
                             
-                            print(f"[Tracker] Added {new_messages} messages from host {sender_username}")
-                    
-                    # Save to disk
-                    channels[channel_name].save_to_disk()
-                    conn.send(b"OK\n")
-                    print(f"[Tracker] Synced channel {channel_name} with {len(channels[channel_name].messages)} messages")
+                            if host_is_online:
+                                print(f"[Tracker] Host {host_username} is online, but accepting non-host message sync")
+                            
+                            # Chỉ thêm tin nhắn mới từ client không phải host
+                            if "messages" in channel_data and channel_data["messages"]:
+                                # Lấy các timestamp hiện có
+                                existing_timestamps = set()
+                                for msg in channels[channel_name].messages:
+                                    existing_timestamps.add(msg.timestamp)
+                                
+                                # Thêm các tin nhắn chưa có
+                                new_messages = 0
+                                for msg in channel_data["messages"]:
+                                    if msg.get("timestamp") not in existing_timestamps:
+                                        channels[channel_name].add_message(msg)
+                                        new_messages += 1
+                                
+                                print(f"[Tracker] Added {new_messages} new messages from non-host client {sender_username}")
+                        else:
+                            # Update channel data
+                            channels[channel_name].host = channel_data["host"]
+                            
+                            # Ensure host is a member
+                            if channel_data["host"] and channel_data["host"] != "visitor":
+                                channels[channel_name].members.add(channel_data["host"])
+                            
+                            # Add other members
+                            if "members" in channel_data:
+                                for member in channel_data["members"]:
+                                    if member and member != "visitor":
+                                        channels[channel_name].members.add(member)
+                            
+                            # Add new messages
+                            if "messages" in channel_data and channel_data["messages"]:
+                                # Check if message is already in channel by timestamp
+                                timestamps = [m.timestamp for m in channels[channel_name].messages]
+                                new_messages = 0
+                                for msg in channel_data["messages"]:
+                                    if msg.get("timestamp") not in timestamps:
+                                        channels[channel_name].add_message(msg)
+                                        new_messages += 1
+                                
+                                print(f"[Tracker] Added {new_messages} messages from host {sender_username}")
+                        
+                        # Save to disk
+                        channels[channel_name].save_to_disk()
+                        conn.send(b"OK\n")
+                        print(f"[Tracker] Synced channel {channel_name} with {len(channels[channel_name].messages)} messages")
                 except json.JSONDecodeError as e:
                     print(f"[Tracker] JSON decode error: {e}")
                     print(f"[Tracker] Received data: {' '.join(parts[1:])}")
@@ -439,13 +490,15 @@ def handle_client(conn):
                 # Send channel data to a peer
                 try:
                     channel_name = parts[1]
-                    if channel_name in channels:
-                        channel_data = channels[channel_name].to_dict()
-                        conn.send(json.dumps(channel_data).encode() + b'\n')
-                        print(f"[Tracker] Sent channel {channel_name} data with {len(channel_data['messages'])} messages")
-                    else:
-                        conn.send(b"ERROR: Channel not found\n")
-                        print(f"[Tracker] Channel {channel_name} not found on request")
+                    # Sử dụng channel_lock để đảm bảo thread-safe khi đọc dữ liệu channels
+                    with channel_lock:
+                        if channel_name in channels:
+                            channel_data = channels[channel_name].to_dict()
+                            conn.send(json.dumps(channel_data).encode() + b'\n')
+                            print(f"[Tracker] Sent channel {channel_name} data with {len(channel_data['messages'])} messages")
+                        else:
+                            conn.send(b"ERROR: Channel not found\n")
+                            print(f"[Tracker] Channel {channel_name} not found on request")
                 except Exception as e:
                     print(f"[Tracker] Error sending channel data: {str(e)}")
                     conn.send(f"ERROR: {str(e)}\n".encode())
@@ -453,26 +506,30 @@ def handle_client(conn):
             elif cmd == "list_channels":
                 # Send list of available channels
                 channel_list = []
-                for name, channel in channels.items():
-                    channel_list.append({
-                        "name": name,
-                        "host": channel.host,
-                        "members": len(channel.members),
-                        "messages": len(channel.messages)
-                    })
+                # Sử dụng channel_lock để đảm bảo thread-safe khi đọc dữ liệu channels
+                with channel_lock:
+                    for name, channel in channels.items():
+                        channel_list.append({
+                            "name": name,
+                            "host": channel.host,
+                            "members": len(channel.members),
+                            "messages": len(channel.messages)
+                        })
                 conn.send(json.dumps(channel_list).encode() + b'\n')
                 print(f"[Tracker] Sent list of {len(channel_list)} channels")
                 
             elif cmd == "debug":
                 # Debug command to list all channels
                 debug_info = []
-                for name, channel in channels.items():
-                    debug_info.append({
-                        "name": name,
-                        "host": channel.host,
-                        "members": list(channel.members),
-                        "message_count": len(channel.messages)
-                    })
+                # Sử dụng channel_lock để đảm bảo thread-safe khi đọc dữ liệu channels
+                with channel_lock:
+                    for name, channel in channels.items():
+                        debug_info.append({
+                            "name": name,
+                            "host": channel.host,
+                            "members": list(channel.members),
+                            "message_count": len(channel.messages)
+                        })
                 conn.send(json.dumps(debug_info).encode() + b'\n')
                 print(f"[Tracker] Sent debug info for {len(debug_info)} channels")
                 

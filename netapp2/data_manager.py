@@ -6,38 +6,39 @@ import threading
 DATA_DIR = "data"
 
 class Message:
-    def __init__(self, sender, content, channel, timestamp=None):
+    """Class representing a message in a channel"""
+    def __init__(self, sender, content, channel, timestamp=None, status="pending"):
         self.sender = sender
         self.content = content
         self.channel = channel
-        self.timestamp = timestamp or datetime.now().isoformat()
-
+        self.timestamp = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        self.status = status
+    
     def to_dict(self):
-        """Chuyển đổi đối tượng Message thành từ điển để serialize thành JSON"""
-        try:
-            return {
-                "sender": str(self.sender),
-                "content": str(self.content),
-                "channel": str(self.channel),
-                "timestamp": str(self.timestamp)
-            }
-        except Exception as e:
-            print(f"[DataManager] Error in Message.to_dict: {e}")
-            # Trả về giá trị an toàn nếu xảy ra lỗi
-            return {
-                "sender": "unknown",
-                "content": "error_content",
-                "channel": "unknown",
-                "timestamp": datetime.now().isoformat()
-            }
-
+        """Convert message to dictionary"""
+        return {
+            "sender": self.sender,
+            "content": self.content,
+            "channel": self.channel,
+            "timestamp": self.timestamp,
+            "status": self.status
+        }
+        
+    def update_status(self, new_status):
+        """Update message status"""
+        self.status = new_status
+        
     @classmethod
     def from_dict(cls, data):
+        """Create message from dictionary"""
+        # Check if status exists in data, if not default to "pending"
+        status = data.get("status", "pending")
         return cls(
-            sender=data["sender"],
-            content=data["content"],
-            channel=data["channel"],
-            timestamp=data["timestamp"]
+            data["sender"],
+            data["content"],
+            data["channel"],
+            data.get("timestamp"),
+            status
         )
 
 class Channel:
@@ -64,7 +65,16 @@ class Channel:
                 print(f"[DataManager] Channel.add_message: Duplicate message detected, not adding: {message.sender}/{message.timestamp}")
                 return existing_msg
                 
+        # Thêm tin nhắn mới
         self.messages.append(message)
+        
+        # Sắp xếp tin nhắn theo thời gian
+        try:
+            self.messages.sort(key=lambda msg: msg.timestamp)
+            print(f"[DataManager] Messages sorted by timestamp after adding new message")
+        except Exception as e:
+            print(f"[DataManager] Error sorting messages: {e}")
+        
         return message
 
     def add_member(self, username):
@@ -124,12 +134,13 @@ class Channel:
             messages_list = []
             for msg in self.messages:
                 try:
-                    # Đảm bảo rằng mỗi tin nhắn đều là dictionary hợp lệ
+                    # Đảm bảo rằng mỗi tin nhắn đều là dictionary hợp lệ với đầy đủ thông tin bao gồm status
                     msg_dict = {
                         "sender": str(msg.sender),
                         "content": str(msg.content),
                         "channel": str(msg.channel),
-                        "timestamp": str(msg.timestamp)
+                        "timestamp": str(msg.timestamp),
+                        "status": str(msg.status) if hasattr(msg, "status") else "pending"
                     }
                     messages_list.append(msg_dict)
                 except Exception as e:
@@ -196,8 +207,27 @@ class DataManager:
                 if filename.endswith(".json") and not filename.startswith("user_"):
                     channel_name = filename[:-5]  # Remove .json extension
                     self.load_channel(channel_name)
+                    
+            # Sắp xếp tin nhắn theo thời gian cho tất cả các kênh sau khi tải
+            self.sort_all_channels_messages()
+            print(f"[DataManager] Sorted messages in all channels after loading")
         except Exception as e:
             print(f"[DataManager] Error loading channels: {e}")
+            
+    def sort_all_channels_messages(self):
+        """Sắp xếp tin nhắn trong tất cả các kênh theo thời gian"""
+        with self._lock:
+            for channel_name, channel in self.channels.items():
+                self.sort_channel_messages(channel)
+                
+    def sort_channel_messages(self, channel):
+        """Sắp xếp tin nhắn trong một kênh theo thời gian"""
+        try:
+            if channel and channel.messages:
+                channel.messages.sort(key=lambda msg: msg.timestamp)
+                print(f"[DataManager] Sorted {len(channel.messages)} messages in channel {channel.name}")
+        except Exception as e:
+            print(f"[DataManager] Error sorting messages in channel {channel.name}: {e}")
             
     def load_channel(self, channel_name):
         """Load a specific channel from disk"""
@@ -230,11 +260,23 @@ class DataManager:
                         if "messages" in data:
                             print(f"[DataManager] Adding {len(data['messages'])} messages to channel")
                             for msg_data in data.get("messages", []):
-                                channel.add_message(Message.from_dict(msg_data))
+                                # Ensure message status is preserved if present
+                                if "status" not in msg_data:
+                                    msg_data["status"] = "pending"
+                                    print(f"[DataManager] Added default 'pending' status to message")
+                                else:
+                                    print(f"[DataManager] Message has status: {msg_data['status']}")
+                                
+                                message = Message.from_dict(msg_data)
+                                channel.add_message(message)
                         
-                        print(f"[DataManager] Acquiring lock to update channels dictionary")
-                        with self._lock:
-                            print(f"[DataManager] Lock acquired, updating channels dictionary")
+                        # Sắp xếp tin nhắn sau khi tải
+                        self.sort_channel_messages(channel)
+                        
+                        print(f"[DataManager] Updating channels dictionary")
+                        # Use a direct lock check instead of nested lock acquisition
+                        if threading.current_thread() is threading.main_thread():
+                            # If we're already in a locked context in the main thread, update directly
                             self.channels[channel_name] = channel
                             
                             # Update user channels
@@ -250,6 +292,26 @@ class DataManager:
                                 if channel.host not in self.hosted_channels:
                                     self.hosted_channels[channel.host] = set()
                                 self.hosted_channels[channel.host].add(channel_name)
+                        else:
+                            # Otherwise acquire lock normally
+                            print(f"[DataManager] Acquiring lock to update channels dictionary")
+                            with self._lock:
+                                print(f"[DataManager] Lock acquired, updating channels dictionary")
+                                self.channels[channel_name] = channel
+                                
+                                # Update user channels
+                                print(f"[DataManager] Updating user_channels for {len(channel.members)} members")
+                                for member in channel.members:
+                                    if member not in self.user_channels:
+                                        self.user_channels[member] = set()
+                                    self.user_channels[member].add(channel_name)
+                                    
+                                # Update hosted channels
+                                if channel.host and channel.host != "visitor":
+                                    print(f"[DataManager] Updating hosted_channels for {channel.host}")
+                                    if channel.host not in self.hosted_channels:
+                                        self.hosted_channels[channel.host] = set()
+                                    self.hosted_channels[channel.host].add(channel_name)
                                 
                         print(f"[DataManager] Loaded channel {channel_name} with {len(channel.messages)} messages")
                         return channel
@@ -268,8 +330,11 @@ class DataManager:
         """Create a new channel"""
         try:
             print(f"[DataManager] Creating new channel {channel_name} with host {host}")
-            with self._lock:
-                print(f"[DataManager] Lock acquired for creating channel {channel_name}")
+            
+            # Check if we're already in a locked context in the main thread
+            if threading.current_thread() is threading.main_thread():
+                # Direct update without re-acquiring the lock
+                print(f"[DataManager] Direct creation in main thread for channel {channel_name}")
                 if channel_name in self.channels:
                     print(f"[DataManager] Channel {channel_name} already exists")
                     return self.channels[channel_name]
@@ -296,6 +361,36 @@ class DataManager:
                 self.save_channel(channel_name)
                 print(f"[DataManager] Channel {channel_name} created and saved successfully")
                 return channel
+            else:
+                # Use lock normally for non-main threads
+                with self._lock:
+                    print(f"[DataManager] Lock acquired for creating channel {channel_name}")
+                    if channel_name in self.channels:
+                        print(f"[DataManager] Channel {channel_name} already exists")
+                        return self.channels[channel_name]
+                    
+                    print(f"[DataManager] Creating Channel object")
+                    channel = Channel(channel_name, host)
+                    print(f"[DataManager] Channel object created successfully")
+                    self.channels[channel_name] = channel
+                    
+                    # Update user channels
+                    if host and host != "visitor":
+                        print(f"[DataManager] Updating user_channels for host {host}")
+                        if host not in self.user_channels:
+                            self.user_channels[host] = set()
+                        self.user_channels[host].add(channel_name)
+                        
+                        # Update hosted channels
+                        print(f"[DataManager] Updating hosted_channels for host {host}")
+                        if host not in self.hosted_channels:
+                            self.hosted_channels[host] = set()
+                        self.hosted_channels[host].add(channel_name)
+                    
+                    print(f"[DataManager] Saving new channel to disk")
+                    self.save_channel(channel_name)
+                    print(f"[DataManager] Channel {channel_name} created and saved successfully")
+                    return channel
         except Exception as e:
             print(f"[DataManager] Error creating channel {channel_name}: {e}")
             import traceback
@@ -340,7 +435,7 @@ class DataManager:
                     return existing_msg
                 
             # Tạo và thêm tin nhắn mới nếu không trùng lặp
-            message = Message(sender, content, channel_name, msg_timestamp)
+            message = Message(sender, content, channel_name, msg_timestamp, "received")
             channel.add_message(message)
             self.save_channel(channel_name)
             return message
@@ -436,6 +531,84 @@ class DataManager:
         with self._lock:
             return list(self.channels.keys())
             
+    def add_channel(self, channel_name, host):
+        """
+        Thêm thông tin kênh vào dữ liệu cục bộ mà không tự động tham gia kênh.
+        Khác với create_channel, hàm này không thêm host vào danh sách thành viên
+        và không cập nhật user_channels.
+        
+        Tham số:
+        - channel_name: Tên kênh
+        - host: Người tạo kênh
+        
+        Trả về:
+        - Channel object nếu thành công, None nếu thất bại
+        """
+        try:
+            print(f"[DataManager] Adding channel {channel_name} with host {host} to local database")
+            
+            # Check if channel already exists
+            if channel_name in self.channels:
+                print(f"[DataManager] Channel {channel_name} already exists in local database")
+                return self.channels[channel_name]
+                
+            # Check if we're already in a locked context in the main thread
+            if threading.current_thread() is threading.main_thread():
+                # Direct update without re-acquiring the lock
+                print(f"[DataManager] Direct creation in main thread for channel {channel_name}")
+                
+                # Create new channel but DON'T add host as member
+                channel = Channel(channel_name, host)
+                # Clear members list (since Channel constructor adds host by default)
+                channel.members.clear()
+                print(f"[DataManager] Channel object created with empty members list")
+                
+                self.channels[channel_name] = channel
+                
+                # Update hosted_channels but NOT user_channels
+                if host and host != "visitor":
+                    print(f"[DataManager] Updating hosted_channels for host {host}")
+                    if host not in self.hosted_channels:
+                        self.hosted_channels[host] = set()
+                    self.hosted_channels[host].add(channel_name)
+                
+                # Save to disk
+                self.save_channel(channel_name)
+                print(f"[DataManager] Channel {channel_name} added to local database successfully")
+                return channel
+            else:
+                # Use lock normally for non-main threads
+                with self._lock:
+                    print(f"[DataManager] Lock acquired for adding channel {channel_name}")
+                    if channel_name in self.channels:
+                        print(f"[DataManager] Channel {channel_name} already exists")
+                        return self.channels[channel_name]
+                    
+                    # Create new channel but DON'T add host as member
+                    channel = Channel(channel_name, host)
+                    # Clear members list (since Channel constructor adds host by default)
+                    channel.members.clear()
+                    print(f"[DataManager] Channel object created with empty members list")
+                    
+                    self.channels[channel_name] = channel
+                    
+                    # Update hosted_channels but NOT user_channels
+                    if host and host != "visitor":
+                        print(f"[DataManager] Updating hosted_channels for host {host}")
+                        if host not in self.hosted_channels:
+                            self.hosted_channels[host] = set()
+                        self.hosted_channels[host].add(channel_name)
+                    
+                    # Save to disk
+                    self.save_channel(channel_name)
+                    print(f"[DataManager] Channel {channel_name} added to local database successfully")
+                    return channel
+        except Exception as e:
+            print(f"[DataManager] Error adding channel {channel_name} to local database: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+            
     def add_offline_message(self, username, channel_name, message_data):
         """Store a message for offline delivery"""
         with self._lock:
@@ -445,8 +618,13 @@ class DataManager:
             if channel_name not in self.offline_messages[username]:
                 self.offline_messages[username][channel_name] = []
                 
+            # Ensure message has status field
+            if "status" not in message_data:
+                message_data["status"] = "pending"
+                
             self.offline_messages[username][channel_name].append(message_data)
             self._save_offline_messages(username)
+            print(f"[DataManager] Added offline message for {username} in channel {channel_name} with status: {message_data['status']}")
             
     def get_offline_messages(self, username):
         """Get all offline messages for a user"""
@@ -471,13 +649,18 @@ class DataManager:
             filepath = os.path.join(DATA_DIR, f"{channel_name}.json")
             print(f"[DataManager] Writing channel data to {filepath}")
             
-            # Prepare channel data
+            # Prepare channel data with all message details including status
             channel_data = channel.to_dict()
+            
+            # Ensure all messages have status field
+            for msg_data in channel_data.get("messages", []):
+                if "status" not in msg_data:
+                    msg_data["status"] = "pending"
             
             with open(filepath, "w") as f:
                 json.dump(channel_data, f, indent=2)
                 
-            print(f"[DataManager] Successfully saved channel {channel_name} to disk")
+            print(f"[DataManager] Successfully saved channel {channel_name} to disk with {len(channel_data.get('messages', []))} messages including status information")
         except Exception as e:
             print(f"[DataManager] Error saving channel {channel_name}: {e}")
             import traceback
@@ -492,11 +675,20 @@ class DataManager:
             filepath = os.path.join(DATA_DIR, f"user_{username}_offline.json")
             
             if username in self.offline_messages and self.offline_messages[username]:
+                # Ensure all offline messages have status field
+                for channel_name, messages in self.offline_messages[username].items():
+                    for msg in messages:
+                        if "status" not in msg:
+                            msg["status"] = "pending"
+                
                 with open(filepath, "w") as f:
                     json.dump(self.offline_messages[username], f, indent=2)
+                    
+                print(f"[DataManager] Saved {sum(len(msgs) for msgs in self.offline_messages[username].values())} offline messages with status for {username}")
             elif os.path.exists(filepath):
                 # Remove file if no messages
                 os.remove(filepath)
+                print(f"[DataManager] Removed empty offline messages file for {username}")
         except Exception as e:
             print(f"[DataManager] Error saving offline messages for {username}: {e}")
             
@@ -512,6 +704,16 @@ class DataManager:
                 with open(filepath, "r") as f:
                     with self._lock:
                         self.offline_messages[username] = json.load(f)
+                        
+                        # Ensure all loaded offline messages have status
+                        offline_msg_count = 0
+                        for channel_name, messages in self.offline_messages[username].items():
+                            for msg in messages:
+                                offline_msg_count += 1
+                                if "status" not in msg:
+                                    msg["status"] = "pending"
+                        
+                        print(f"[DataManager] Loaded {offline_msg_count} offline messages for {username}")
                         
             # Rebuild user channels and hosted channels
             with self._lock:
@@ -541,18 +743,11 @@ class DataManager:
                 self.offline_messages[username] = {} 
             
     def clear_offline_messages(self, username):
-        """Clear offline messages for a user after syncing"""
+        """Clear offline messages for a user"""
         with self._lock:
             if username in self.offline_messages:
                 self.offline_messages[username] = {}
-                
-            # Xóa file offline nếu tồn tại
-            filepath = os.path.join(DATA_DIR, f"user_{username}_offline.json")
-            if os.path.exists(filepath):
-                try:
-                    os.remove(filepath)
-                    print(f"[DataManager] Removed offline messages file for {username}")
-                except Exception as e:
-                    print(f"[DataManager] Error removing offline messages file: {e}")
-            
-            return True 
+                self._save_offline_messages(username)
+                print(f"[DataManager] Cleared offline messages for {username}")
+                return True
+            return False 
