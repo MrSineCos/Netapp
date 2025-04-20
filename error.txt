@@ -12,3 +12,51 @@ Lỗi tin nhắn trong channel này lại nhận được trong channel khác.
 -> Cần có các file riêng biệt giữa các client với nhau và với tracker, trong đó:
     + Giữa các client: cần lưu trữ riêng thông tin về kênh
 - Các client chưa có file lưu trữ thông tin chat từ các kênh tham gia do đó chưa có cơ chế lưu tin nhắn để đồng bộ với server khi online.
+
+19/4:
+- Khi một client đang online, đồng thời ngay trong lúc đó một client hoặc client host chuyển từ trạng thái offline sang online và client đó có tin nhắn được gửi đi lúc offline,
+ nhưng client đang online ban đầu lại không đồng bộ được tin nhắn đó nhưng lại có thể được đồng bộ khi logout và login lại trong app.
+- Cần hiện thực lại cơ chế đồng bộ tin nhắn giữa các client, client host và tracker:
+    + Với client: 
+        - Khi online: 
+            + Chưa gửi tin nhắn cho visitor
+            + Nếu có một client nào đó chuyển từ offline sang online
+        - Khi offline sang online: 
+            + Chưa đồng bộ với client host nếu client host online, còn không thì mới đồng bộ với tracker
+            + Thay vì khi đồng bộ phải gửi toàn bộ lịch sử tin nhắn, thì app sẽ có chức năng lưu lại những tin nhắn được gửi đi khi offline và
+                gửi các tin nhắn đó đi khi online.
+
+!!!!!! Nói chung, ngày mai cần soát lại cách thức đồng bộ tin nhắn trong đề
+!!!!!! Cách thức đồng bộ hiện tại của app là trong checklist
+!!!!!! Hiện tại, hiệu suất đồng bộ của app thấp vì mỗi lần đồng bộ là gửi toàn bộ lịch sử tin nhắn
+!!!!!! Đang nhắn với chat: @agent.py Hiện tại tôi gặp lỗi là khi client bất kì chuyển từ trạng thái offline sang online và nó có chứa các tin nhắn được gửi đi lúc offline, thì sau khi online lại, các tin nhắn đó chỉ được đồng bộ với tracker, còn các client trong cùng kênh đó lại chưa được đồng bộ tin nhắn, có vẻ như bạn cần hiện thực lại cơ chế đồng bộ:
+- Khi một client không phải host bất kì có tin nhắn được gửi khi trong trạng thái offline và khi client đó chuyển từ offline sang online thì tiến hành đồng bộ tin nhắn với client host và với tracker.
+- Khi một client không phải host chuyển từ trạng thái offlline sang online thì tiến hành đồng bộ với client host của kênh mà client đó tham gia nếu client host đó online, nếu không thì tiến hành đồng bộ với tracker.
+- Khi tracker được đồng bộ tin nhắn từ một client bất kì thì nó sẽ tiến hành đồng bộ với các client khác ngay sau đó.
+
+
+9h 19/4:
+- Cần sửa lại cơ chế đồng bộ của các hàm sync: vì các hàm này chỉ yêu cầu lịch sử chat từ tracker
+-> chưa gửi các tin nhắn được user tạo ra khi offline lên cho tracker và client host
+
+20/4:
+- Chưa thành công đồng bộ tin nhắn giữa client và tracker.
+- Gặp hiện tượng là chỉ khi các tin nhắn tiếp theo được gửi trong trạng thái online thì các tin nhắn chưa được đồng bộ trước đó mới được đồng bộ cho tracker.
+- Các hàm sync quá cồng kềnh và chưa logic (sync_offline_message với sync_on_tracker_reconnect,
+                                             sync_non_hosted_channels_with_tracker với sync_with_tracker).
+
+14h 20/4:
+- Các tin nhắn mới nhận được sau khi đồng bộ sẽ có trạng thái là received (cần cập nhật thêm trạng thái received)
+- Khi join thì user không được thêm vào danh sách member trên tracker mà chỉ có trên danh sách member được lưu cục bộ.
+- Đồng thời cần lưu ý thêm khi danh sách member được cập nhật trên tracker thì lúc sau cx phải được cập nhật trên client và client host
+- Khi client host online thì không thực hiện lấy lịch sử từ client host được (hoặc lấy được nhưng bị lỗi in ra terminal)
+
+8:33 20/4:
+- Chưa có login.
+- Cần sửa lại response trong handle_command của agent.py và cơ chế xử lí response đó trong chat_ui.py
+
+21/4:
+- Ô chat chưa được cập nhật mỗi khi gửi tin nhắn (pending -> sent), và khi các client trong kênh gửi tin nhắn đến.
+- Cần bổ sung hoặc hoàn thiện cơ chế thông báo.
+- Cần chỉnh lại code để lưu hoạt động của app vào file log.
+- Cần kiểm tra và điều chỉnh lại chế độ visitor

@@ -1,46 +1,90 @@
-*Phân quyền và các chức năng cơ bản (dưới dạng CLI)
+*Authentication mode (visitor view and user view) và các chức năng cơ bản (dưới dạng CLI)
 - Visitor:
     + Read-only: ok
     + Join kênh: ok
-    + Leave kênh:
+    + Leave kênh: 
     + history chat: ? (phân vân ko bik có nên thêm vô ko)
     + Liệt kê user (danh sách và state user): ok
-    + List_all (liệt kê channels): ok
+    + List_all (liệt kê channels):
+        - Tên kênh: ok
+        - Chủ kênh: ok
+        - Số thành viên:
     + Thoát chương trình: ok
+
+- Chuyển từ trạng thái visitor sang user:
+    + Đồng bộ tin nhắn:
+        - Lên tracker (chỉ gửi các tin nhắn có status pending): ok
+        - Từ tracker xuống (fetch lấy lịch sử tin nhắn): ok
+        - Lên các client peer đang online: ok
+    + Cập nhật trạng thái và tên người dùng lên tracker: ok
+
+- Chuyển từ user sang visitor:
+    + Cập nhật trạng thái và tên người dùng lên tracker: ok
+
 - User:
     + chat: 
         - Nhận:
             + Client host: ok
             + Client peer (các client trong cùng kênh với người nhận): ok
+            + Các tin nhắn nhận được có trạng thái là received: ok
         - Gửi:
             + Client host: ok
             + Client peer (các client trong cùng kênh với người nhận): ok
             + Visitor (cho phép xem hay không):
+            + Các tin nhắn được gửi đi:
+                - Khi chưa gửi thành công có status là pending: ok
+                - Khi gửi thành công đến client host hoặc tracker có status là sent: ok
     + Xem lịch sử chat của kênh:
         - Sở hữu: ok
         - Tham gia: 
             + online (lấy từ client host): ok
             + offline (lấy từ tracker): ok
-    + Liệt kê user: ok
-    + List_all (liệt kê kênh): ok
+    + Liệt kê user: 
+        - Trạng thái và tên nguời tham gia: ok
+        - Tự động cập nhật danh sách online khi có thay đổi: ok
+    + List_all (liệt kê kênh):
+        - Danh sách kênh: ok
+        - Host kênh: ok
+        - Số lượng thành viên:
+    + channels (các kênh đã join):
+        - Danh sách kênh: ok
+        - Host kênh: ok
+        - Số lượng thành viên: ok
     + leave kênh: ok
-    + Tạo kênh: ok
-    + Join kênh: ok
+    + Tạo kênh:
+        - Online: ok
+        - Offline (không tạo kênh được): ok
+    + Join kênh khi (chỉ có thể join khi online):
+        - Client host online: ok
+        - Client host offline (thông tin danh sách thành viên được gửi vào tracker): ok
     + Đồng bộ tin nhắn trong kênh:
         - Khi online:
-            + Sở hữu: ok
+            + Sở hữu:
+                - Gửi lên tracker: ok
+                - Cập nhật tin nhắn từ pending -> sent: ok
             + Tham gia:
-                - Đồng bộ lên tracker: ok
-                - Đồng bộ từ tracker xuống: ok
+                - Đồng bộ lên tracker (gửi tin nhắn tạo khi online): ok
+                - Đồng bộ từ:
+                    + Client host (nếu phát hiện client host online hoặc đang online): ok? (có vẻ còn lỗi là đồng bộ 2 lần liên tiếp với host)
+                    + Tracker (nếu client host không online): ok
         - Từ offline -> online:
             + Sở hữu:
-                - Đồng bộ lên tracker: ok
+            (thứ tự đồng bộ:    1. Gửi tin nhắn được nhắn khi đang offline (nếu có) đến các client trong kênh mà đang online và tracker.
+                                2. Yêu cầu lịch sử chat từ tracker)
+                - Đồng bộ lên tracker: ok (ko cần gửi toàn bộ lịch sử chat, chỉ cần gửi tin nhắn được đánh dấu là pending)
                 - Đồng bộ từ tracker xuống: ok
-            + Tham gia: 
-                - Đồng bộ lên tracker: ok
-                - Đồng bộ từ tracker xuống:
-        - Chỉ có tin nhắn còn thiếu hoặc chưa được cập nhật thì mới được thêm vào: ok ?
-    + Streaming: ok?
+                - Gửi các tin nhắn được gửi khi offline đến các client cùng kênh đang online: ok
+            + Tham gia:
+            (thứ tự đồng bộ:    1. Gửi tin nhắn được nhắn khi đang offline (nếu có) đến tracker và các client khác trong kênh mà đang online
+                                2.  If <client host đang online>:   Yêu cầu lịch sử chat từ client host
+                                    else:                           Yêu cầu lịch sử chat từ tracker)
+                - Đồng bộ lên tracker (chỉ gửi các tin nhắn được gửi đi lúc offline): ok
+                - Đồng bộ client host: ok
+                - Đồng bộ từ tracker xuống: ok
+                - Đồng bộ từ channel hosting (theo đề): ok
+        - Chỉ có tin nhắn còn thiếu hoặc chưa được cập nhật thì mới được thêm vào: ok
+        - Chỉ có các tin nhắn được gửi đi lúc offline mới được gửi cho các client có user tham gia kênh đang online: ok
+    + Streaming: ok
 
 
 * Các phi chức năng:
@@ -50,12 +94,17 @@
     + Danh sách kênh:
     + Tiêu đề kênh được chọn:
     + Danh sách người dùng:
-    + Trạng thái người dùng:
+    + Trạng thái người dùng (online/offline):
+    + Trạng thái tin nhắn (pending, sent, received): 
     + Thông báo:
-        - Tin nhắn nhận được từ kênh nào
-        - Tin nhắn gửi success or fail
-        - Kênh join/create success or fail
-        - Đồng bộ hay chưa đồng bộ
-    + Nút tạo/rời kênh, nhập tên kênh muốn tạo.
-- Cân bằng tải:
-    + Streaming:
+        - Tin nhắn nhận được từ kênh nào:
+        - Tin nhắn gửi success or fail:
+        - Kênh join/create success or fail:
+        - Đồng bộ hay chưa đồng bộ: 
+    + Nút tạo/rời kênh, nhập tên kênh muốn tạo:
+
+Extra:
+    + Bảo mật tin nhắn (mã hóa):
+    + Chiến thuật seeding:
+    + Bot chat tự động:
+    + System api:
