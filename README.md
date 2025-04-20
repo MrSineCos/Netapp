@@ -10,9 +10,21 @@
 
 - Cài đặt Python 3.x.
 - Đảm bảo các thư viện tiêu chuẩn Python đã có sẵn (tkinter, multiprocessing, socket, threading, ...).
-- Đảm bảo tracker server đã chạy trên máy (hoặc máy chủ) tại địa chỉ và port mặc định (`127.0.0.1:12345`). Nếu chưa có tracker, bạn cần chạy tracker riêng (không nằm trong mã nguồn này).
 
-### 2. Chạy ứng dụng
+### 2. Chạy tracker server (bắt buộc)
+
+Ứng dụng cần tracker server để hoạt động. Nếu bạn đã có mã nguồn tracker, hãy chạy tracker trước khi chạy các peer.
+
+Ví dụ (giả sử bạn có file `tracker.py`):
+
+```bash
+python tracker.py
+```
+
+- Tracker mặc định lắng nghe tại địa chỉ `127.0.0.1` và port `12345`.
+- Đảm bảo tracker chạy trước khi khởi động các peer.
+
+### 3. Chạy ứng dụng peer
 
 **Chạy bằng giao diện đồ họa (UI):**
 
@@ -36,7 +48,7 @@ python netapp2\cli.py
 - Mở file `cli.py`, bỏ comment dòng `cli_loop(command_queue, response_queue)` và comment dòng `run_chat_ui(command_queue, response_queue)`.
 - Chạy lại như trên, bạn sẽ thao tác qua dòng lệnh thay vì giao diện đồ họa.
 
-### 3. Thư mục dữ liệu
+### 4. Thư mục dữ liệu
 
 - Dữ liệu kênh, tin nhắn được lưu trong thư mục `data/` dưới dạng file JSON.
 - Nếu chưa có thư mục này, chương trình sẽ tự tạo khi chạy.
