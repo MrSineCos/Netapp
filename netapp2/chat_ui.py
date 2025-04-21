@@ -5,11 +5,12 @@ import queue
 import time
 import os
 import json
+import socket
 
 DATA_DIR = "data"
 
 class ChatUI:
-    def __init__(self, master, command_queue, response_queue):
+    def __init__(self, master, command_queue, response_queue, port=None):
         self.master = master
         self.command_queue = command_queue
         self.response_queue = response_queue
@@ -19,6 +20,18 @@ class ChatUI:
         self.username = ""
         self.status = "offline"
         self.notifications = queue.Queue()
+
+        # --- Thêm thuộc tính lưu IP, invisible mode, port ---
+        self.my_ip = self.get_local_ip()
+        self.invisible_mode = False
+        self.my_port = port  # Gán port truyền vào khi khởi tạo
+        self._port_locked = False  # Thêm biến này để kiểm soát việc khóa port
+        self.settings_visible = False  # Thêm biến trạng thái hiển thị settings panel
+        # ----------------------------------------------------
+
+        # Nếu đã có port truyền vào thì khóa trường nhập port trong settings
+        if self.my_port:
+            self._port_locked = True
 
         master.title("Chat App")
 
@@ -31,6 +44,10 @@ class ChatUI:
         self.login_btn.pack(side=tk.LEFT, padx=2)
         self.logout_btn = tk.Button(self.top_frame, text="Logout", command=self.logout, state=tk.DISABLED)
         self.logout_btn.pack(side=tk.LEFT, padx=2)
+        # --- Thêm nút Cài đặt ---
+        self.settings_btn = tk.Button(self.top_frame, text="Cài đặt", command=self.toggle_settings_panel)
+        self.settings_btn.pack(side=tk.RIGHT, padx=2)
+        # ------------------------
 
         # Left panel: Channel list
         self.channel_frame = tk.Frame(master)
@@ -57,6 +74,12 @@ class ChatUI:
         self.send_btn = tk.Button(self.center_frame, text="Send", command=self.send_message)
         self.send_btn.pack(fill=tk.X, pady=2)
 
+        # --- Thêm frame settings (ẩn mặc định) ---
+        self.settings_frame = tk.Frame(master, borderwidth=2, relief=tk.GROOVE)
+        # Các widget settings sẽ được tạo trong self.build_settings_panel()
+        self.build_settings_panel()
+        # -----------------------------------------
+
         # Right panel: User list
         self.user_frame = tk.Frame(master)
         self.user_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
@@ -77,11 +100,160 @@ class ChatUI:
         threading.Thread(target=self.update_ui_loop, daemon=True).start()
         self.master.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # Initial load
-        self.refresh_channels()
-        self.refresh_users()
-        self.update_user_label()
-        self.update_status_label()
+        # Khóa ô nhập chat và nút tạo kênh khi khởi động (visitor mode)
+        self.update_chat_input_state()
+        self.update_create_channel_btn_state()
+
+        # --- Hiển thị panel settings khi khởi động, ẩn các panel chat ---
+        self.show_settings_panel(startup=True)
+        # --------------------------------------------------------------
+
+    def get_local_ip(self):
+        """Lấy địa chỉ IP cục bộ"""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    # --- Thay thế show_settings_window bằng panel ---
+    def build_settings_panel(self):
+        """Tạo các widget cho panel cài đặt (settings_frame)"""
+        # Xóa các widget cũ nếu có
+        for widget in self.settings_frame.winfo_children():
+            widget.destroy()
+
+        row = 0
+        # IP address (readonly)
+        tk.Label(self.settings_frame, text="Địa chỉ IP:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        self.ip_entry = tk.Entry(self.settings_frame)
+        self.ip_entry.grid(row=row, column=1, padx=5, pady=5)
+        self.ip_entry.insert(0, self.my_ip)
+        self.ip_entry.config(state="readonly")
+        row += 1
+
+        # Port (editable lần đầu, sau đó readonly)
+        tk.Label(self.settings_frame, text="Port:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        self.port_entry = tk.Entry(self.settings_frame)
+        self.port_entry.grid(row=row, column=1, padx=5, pady=5)
+        if self.my_port:
+            self.port_entry.insert(0, str(self.my_port))
+        # Nếu đã khóa port thì disable trường nhập
+        if self._port_locked:
+            self.port_entry.config(state="readonly")
+        row += 1
+
+        # Invisible mode (checkbox)
+        self.invisible_var = tk.BooleanVar(value=self.invisible_mode)
+        self.invisible_chk = tk.Checkbutton(self.settings_frame, text="Invisible mode", variable=self.invisible_var)
+        self.invisible_chk.grid(row=row, column=0, columnspan=2, padx=5, pady=5)
+        row += 1
+
+        # Save button
+        self.save_btn = tk.Button(self.settings_frame, text="Lưu", command=self.save_settings)
+        self.save_btn.grid(row=row, column=0, columnspan=2, pady=10)
+
+    def toggle_settings_panel(self):
+        """Bật/tắt panel cài đặt khi bấm nút Cài đặt"""
+        if self.settings_visible:
+            self.hide_settings_panel()
+        else:
+            self.show_settings_panel()
+
+    def show_settings_panel(self, startup=False):
+        """Hiển thị panel cài đặt, ẩn vùng chat"""
+        if self.settings_visible and not startup:
+            return  # Đã hiển thị rồi, không làm gì cả
+        self.settings_visible = True
+        # Ẩn vùng chat
+        self.center_frame.pack_forget()
+        # Hiện panel settings ở vị trí center
+        self.settings_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.build_settings_panel()
+        # Nếu là khởi động, disable các nút khác
+        if startup:
+            self.channel_frame.pack_forget()
+            self.user_frame.pack_forget()
+            self.top_frame.pack_forget()
+            self.notification_label.pack_forget()
+            # Hiện lại sau khi lưu settings
+        else:
+            # Khi bấm nút cài đặt, vẫn giữ các panel khác
+            pass
+
+    def hide_settings_panel(self):
+        """Ẩn panel cài đặt, hiện lại vùng chat"""
+        if not self.settings_visible:
+            return
+        self.settings_visible = False
+        self.settings_frame.pack_forget()
+        self.center_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def save_settings(self):
+        """Lưu cài đặt từ panel settings"""
+        # Nếu đã khóa port thì không cho chỉnh sửa nữa
+        if self._port_locked:
+            port = self.my_port
+        else:
+            port_str = self.port_entry.get().strip()
+            try:
+                port = int(port_str)
+                if not (1024 <= port <= 65535):
+                    raise ValueError
+            except Exception:
+                messagebox.showerror("Lỗi", "Vui lòng nhập port hợp lệ (1024-65535).")
+                return
+            self.my_port = port
+
+        self.invisible_mode = self.invisible_var.get()
+        # Gửi lệnh cập nhật invisible mode cho agent
+        if self.invisible_mode:
+            self.command_queue.put("status invisible")
+        else:
+            self.command_queue.put("status online")
+        self.notifications.put("Đã lưu cài đặt.")
+
+        # Nếu là lần đầu khởi động, truyền port cho agent và khóa port
+        if not hasattr(self, "_settings_initialized"):
+            self._settings_initialized = True
+            self._port_locked = True  # Khóa port sau lần đầu lưu
+            # Gửi lệnh set_port cho agent
+            self.command_queue.put(f"set_port {self.my_port}")
+            # Hiện lại các panel
+            self.top_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=2)
+            self.channel_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+            self.user_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+            self.notification_label.pack(fill=tk.X, side=tk.BOTTOM)
+            # Ẩn settings, hiện chat
+            self.hide_settings_panel()
+            # --- Sửa tại đây: reset current_channel và refresh lại danh sách kênh ---
+            self.current_channel = None
+            self.refresh_channels()
+            self.refresh_users()
+            self.update_user_label()
+            self.update_status_label()
+        else:
+            # Nếu chỉ là mở settings từ nút, ẩn settings, hiện chat
+            self.hide_settings_panel()
+
+    def update_chat_input_state(self):
+        """Enable/disable chat input and send button based on login state."""
+        if self.username:
+            self.message_entry.config(state="normal")
+            self.send_btn.config(state="normal")
+        else:
+            self.message_entry.config(state="disabled")
+            self.send_btn.config(state="disabled")
+
+    def update_create_channel_btn_state(self):
+        """Enable/disable create channel button based on login state."""
+        if self.username:
+            self.create_channel_btn.config(state="normal")
+        else:
+            self.create_channel_btn.config(state="disabled")
 
     def update_user_label(self):
         if self.username:
@@ -92,11 +264,18 @@ class ChatUI:
             self.user_label.config(text="User: (not logged in)")
             self.logout_btn.config(state=tk.DISABLED)
             self.login_btn.config(state=tk.NORMAL)
+        # Cập nhật trạng thái ô nhập chat và nút tạo kênh mỗi khi cập nhật user label
+        self.update_chat_input_state()
+        self.update_create_channel_btn_state()
 
     def update_status_label(self):
-        self.status_label.config(text=f"Status: {self.status}")
+        # Hiển thị trạng thái invisible nếu đang bật
+        if self.invisible_mode:
+            self.status_label.config(text="Status: invisible")
+        else:
+            self.status_label.config(text=f"Status: {self.status}")
 
-    def send_command_and_handle_response(self, cmd, wait_time=5):
+    def send_command_and_handle_response(self, cmd, wait_time=5, expect_username=None):
         """Gửi command tới agent, chờ response và xử lý kết quả"""
         self.command_queue.put(cmd)
         start = time.time()
@@ -104,7 +283,17 @@ class ChatUI:
         while time.time() - start < wait_time:
             try:
                 if not self.response_queue.empty():
-                    response = self.response_queue.get()
+                    resp = self.response_queue.get()
+                    # Bỏ qua response tự động (auto)
+                    if isinstance(resp, dict) and resp.get("auto", False):
+                        self.response_queue.put(resp)
+                        continue
+                    # Nếu expect_username được truyền vào, chỉ nhận response đúng user
+                    if expect_username and isinstance(resp, dict):
+                        if resp.get("username") != expect_username:
+                            # Không đúng response, bỏ qua và tiếp tục lấy response khác
+                            continue
+                    response = resp
                     break
             except Exception:
                 break
@@ -137,20 +326,19 @@ class ChatUI:
             return
         name = simpledialog.askstring("Login", "Enter username:")
         if name:
-            resp = self.send_command_and_handle_response(f"login:{name}")
+            resp = self.send_command_and_handle_response(f"login:{name}", expect_username=name)
             if resp and resp.get("status") == "ok":
-                agent_username = resp.get("username") if "username" in resp else name
-                self.username = agent_username
-                # Cập nhật trạng thái nếu agent trả về
-                if "status_value" in resp:
-                    self.status = resp["status_value"]
-                else:
-                    self.status = "online"
+                # Đảm bảo lấy đúng username từ response, fallback về name nếu thiếu
+                self.username = resp.get("username", name)
+                self.status = resp.get("status_value", "online")
                 self.notifications.put(f"Logged in as {self.username}.")
                 self.update_user_label()
                 self.update_status_label()
+                self.current_channel = None  # Reset current_channel để tránh lỗi chỉ số
                 self.refresh_channels()
                 self.refresh_users()
+                self.update_chat_input_state()
+                self.update_create_channel_btn_state()
             else:
                 self.notifications.put("Login failed.")
 
@@ -171,6 +359,8 @@ class ChatUI:
             self.update_status_label()
             self.refresh_channels()
             self.refresh_users()
+            self.update_chat_input_state()
+            self.update_create_channel_btn_state()  # Khóa nút tạo kênh khi logout
         else:
             self.notifications.put("Logout failed.")
 
@@ -197,10 +387,18 @@ class ChatUI:
         selection = self.channel_listbox.curselection()
         if selection:
             idx = selection[0]
-            self.current_channel = self.channels[idx]
-            self.channel_title.config(text=f"Channel: {self.current_channel['name']}")
-            self.refresh_chat()
-            self.refresh_users()
+            # Kiểm tra chỉ số hợp lệ
+            if idx < len(self.channels):
+                self.current_channel = self.channels[idx]
+                self.channel_title.config(text=f"Channel: {self.current_channel['name']}")
+                self.refresh_chat()
+                self.refresh_users()
+            else:
+                self.current_channel = None
+                self.channel_title.config(text="No channel selected")
+                self.chat_display.config(state='normal')
+                self.chat_display.delete(1.0, tk.END)
+                self.chat_display.config(state='disabled')
         else:
             self.current_channel = None
             self.channel_title.config(text="No channel selected")
@@ -212,11 +410,15 @@ class ChatUI:
         name = simpledialog.askstring("Create Channel", "Enter channel name:")
         if name:
             resp = self.send_command_and_handle_response(f"create {name}")
-            self.refresh_channels()
             if resp and resp.get("status") == "ok":
                 self.notifications.put(f"Created channel '{name}' successfully.")
+                # Sau khi tạo kênh, đồng bộ lại với tracker để lấy file local mới nhất
+                self.sync()
+                self.refresh_channels()
             else:
                 self.notifications.put(f"Failed to create channel '{name}'.")
+                # Nếu thất bại vẫn nên refresh lại danh sách kênh
+                # self.refresh_channels()
 
     def leave_channel(self):
         if self.current_channel:
@@ -306,20 +508,81 @@ class ChatUI:
         self.chat_display.config(state='disabled')
 
     def update_ui_loop(self):
-        while self.running:
-            # Handle notifications
+        last_channel = None
+        last_message_count = 0
+        last_message_statuses = []
+        last_status = self.status  # Lưu trạng thái user lần trước
+        while True:
+            if not self.running:
+                break
             try:
+                # Handle notifications
                 note = self.notifications.get_nowait()
                 self.notification_label.config(text=note)
             except queue.Empty:
                 pass
-            # Xử lý các response còn lại trong response_queue (nếu có)
+            except Exception:
+                break  # UI đã bị destroy
+
             try:
+                # Xử lý các response còn lại trong response_queue (nếu có)
+                temp_queue = []
                 while not self.response_queue.empty():
                     resp = self.response_queue.get_nowait()
-                    # Có thể mở rộng xử lý các loại response khác ở đây nếu muốn
+                    # --- BẮT THÔNG BÁO TẠO KÊNH TỪ PEER KHÁC ---
+                    if isinstance(resp, dict) and resp.get("type") == "join_channel":
+                        peer_username = resp.get("username")
+                        channel_name = resp.get("channel")
+                        # Chỉ thông báo nếu không phải chính mình tạo
+                        if peer_username and channel_name and peer_username != self.username:
+                            self.notifications.put(f"Người dùng '{peer_username}' đã tạo hoặc tham gia kênh '{channel_name}'.")
+                            self.refresh_channels()
+                        # Không đưa vào temp_queue để tránh xử lý lại
+                        continue
+                    # --- Xử lý response tự động (auto) ---
+                    if isinstance(resp, dict) and resp.get("auto", False):
+                        if "status_value" in resp:
+                            self.status = resp["status_value"]
+                            self.update_status_label()
+                    else:
+                        temp_queue.append(resp)
+                for resp in temp_queue:
+                    self.response_queue.put(resp)
             except Exception:
-                pass
+                break  # UI đã bị destroy
+
+            # --- Tự động refresh chat khi có thay đổi ---
+            if self.current_channel:
+                channel_name = self.current_channel['name']
+                filepath = os.path.join(DATA_DIR, f"{channel_name}.json")
+                try:
+                    with open(filepath, "r") as f:
+                        data = json.load(f)
+                        messages = data.get("messages", [])
+                        message_statuses = [(msg.get("timestamp", ""), msg.get("status", "")) for msg in messages]
+                        if (
+                            channel_name != last_channel or
+                            len(messages) != last_message_count or
+                            message_statuses != last_message_statuses
+                        ):
+                            self.refresh_chat()
+                            last_channel = channel_name
+                            last_message_count = len(messages)
+                            last_message_statuses = message_statuses
+                except Exception:
+                    pass
+            else:
+                last_channel = None
+                last_message_count = 0
+                last_message_statuses = []
+            # -------------------------------------------
+
+            # --- Chỉ refresh trạng thái user khi status thay đổi ---
+            if self.status != last_status:
+                self.refresh_users()
+                last_status = self.status
+            # ------------------------------------------------------
+
             time.sleep(0.2)
 
     def on_close(self):
@@ -328,9 +591,16 @@ class ChatUI:
         except Exception:
             pass
         self.running = False
-        self.master.destroy()
+        try:
+            self.master.quit()
+        except Exception:
+            pass
+        try:
+            self.master.destroy()
+        except Exception:
+            pass
 
-def run_chat_ui(command_queue, response_queue):
+def run_chat_ui(command_queue, response_queue, port=None):
     root = tk.Tk()
-    app = ChatUI(root, command_queue, response_queue)
+    app = ChatUI(root, command_queue, response_queue, port=port)
     root.mainloop()

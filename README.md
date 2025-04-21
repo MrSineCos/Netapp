@@ -117,6 +117,6 @@ python netapp2\cli.py
 ## Lưu ý
 
 - Mỗi peer là một tiến trình độc lập, có thể chạy trên nhiều máy khác nhau.
-- Tracker là thành phần trung tâm, có thể được chạy trước hoặc sau các peer (nếu chạy trước thì lúc này các peer được coi là đang offline)
+- Tracker là thành phần trung tâm, có thể được chạy trước hoặc sau các peer (nếu chạy sau thì lúc này các peer được coi là đang offline)
 - Dữ liệu kênh/tin nhắn được lưu cục bộ dưới dạng file JSON trong thư mục `data/`.
 - Ứng dụng hỗ trợ cả chế độ visitor (khách) và authenticated (đăng nhập).

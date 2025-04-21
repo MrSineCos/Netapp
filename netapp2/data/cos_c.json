@@ -62,6 +62,62 @@
       "channel": "cos_c",
       "timestamp": "2025-04-21 00:27:40.789528",
       "status": "sent"
+    },
+    {
+      "sender": "cos",
+      "content": "bonjour",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 09:57:12.916561",
+      "status": "sent"
+    },
+    {
+      "sender": "sin",
+      "content": "hi 12:09",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 12:09:43.160951",
+      "status": "sent"
+    },
+    {
+      "sender": "sin",
+      "content": "time for lunch",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 12:10:36.631300",
+      "status": "sent"
+    },
+    {
+      "sender": "cos",
+      "content": "hi 12:46",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 12:47:00.339532",
+      "status": "received"
+    },
+    {
+      "sender": "sin",
+      "content": "hi 2:08",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 14:08:08.792057",
+      "status": "sent"
+    },
+    {
+      "sender": "sin",
+      "content": "hi 2:12",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 14:12:11.382486",
+      "status": "sent"
+    },
+    {
+      "sender": "sin",
+      "content": "hi afternoon",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 14:12:42.241596",
+      "status": "sent"
+    },
+    {
+      "sender": "sin",
+      "content": "hi 2:13",
+      "channel": "cos_c",
+      "timestamp": "2025-04-21 14:13:56.308736",
+      "status": "sent"
     }
   ]
 }

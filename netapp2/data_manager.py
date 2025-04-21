@@ -330,67 +330,24 @@ class DataManager:
         """Create a new channel"""
         try:
             print(f"[DataManager] Creating new channel {channel_name} with host {host}")
-            
-            # Check if we're already in a locked context in the main thread
-            if threading.current_thread() is threading.main_thread():
-                # Direct update without re-acquiring the lock
-                print(f"[DataManager] Direct creation in main thread for channel {channel_name}")
+            with self._lock:
                 if channel_name in self.channels:
                     print(f"[DataManager] Channel {channel_name} already exists")
                     return self.channels[channel_name]
-                
-                print(f"[DataManager] Creating Channel object")
                 channel = Channel(channel_name, host)
-                print(f"[DataManager] Channel object created successfully")
                 self.channels[channel_name] = channel
-                
                 # Update user channels
                 if host and host != "visitor":
-                    print(f"[DataManager] Updating user_channels for host {host}")
                     if host not in self.user_channels:
                         self.user_channels[host] = set()
                     self.user_channels[host].add(channel_name)
-                    
                     # Update hosted channels
-                    print(f"[DataManager] Updating hosted_channels for host {host}")
                     if host not in self.hosted_channels:
                         self.hosted_channels[host] = set()
                     self.hosted_channels[host].add(channel_name)
-                
-                print(f"[DataManager] Saving new channel to disk")
                 self.save_channel(channel_name)
                 print(f"[DataManager] Channel {channel_name} created and saved successfully")
                 return channel
-            else:
-                # Use lock normally for non-main threads
-                with self._lock:
-                    print(f"[DataManager] Lock acquired for creating channel {channel_name}")
-                    if channel_name in self.channels:
-                        print(f"[DataManager] Channel {channel_name} already exists")
-                        return self.channels[channel_name]
-                    
-                    print(f"[DataManager] Creating Channel object")
-                    channel = Channel(channel_name, host)
-                    print(f"[DataManager] Channel object created successfully")
-                    self.channels[channel_name] = channel
-                    
-                    # Update user channels
-                    if host and host != "visitor":
-                        print(f"[DataManager] Updating user_channels for host {host}")
-                        if host not in self.user_channels:
-                            self.user_channels[host] = set()
-                        self.user_channels[host].add(channel_name)
-                        
-                        # Update hosted channels
-                        print(f"[DataManager] Updating hosted_channels for host {host}")
-                        if host not in self.hosted_channels:
-                            self.hosted_channels[host] = set()
-                        self.hosted_channels[host].add(channel_name)
-                    
-                    print(f"[DataManager] Saving new channel to disk")
-                    self.save_channel(channel_name)
-                    print(f"[DataManager] Channel {channel_name} created and saved successfully")
-                    return channel
         except Exception as e:
             print(f"[DataManager] Error creating channel {channel_name}: {e}")
             import traceback
@@ -750,4 +707,4 @@ class DataManager:
                 self._save_offline_messages(username)
                 print(f"[DataManager] Cleared offline messages for {username}")
                 return True
-            return False 
+            return False

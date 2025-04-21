@@ -60,3 +60,10 @@ Lỗi tin nhắn trong channel này lại nhận được trong channel khác.
 - Cần bổ sung hoặc hoàn thiện cơ chế thông báo.
 - Cần chỉnh lại code để lưu hoạt động của app vào file log.
 - Cần kiểm tra và điều chỉnh lại chế độ visitor
+
+2:40:
+- Lỗi khi nhận được thông báo tạo kênh từ một client thì trong cửa sổ app không hiện ra kênh đó
+hoặc có thể tạo thêm nút join để join kênh đó thì mới thêm kênh đó vào cửa sổ app.
+- hoặc có thể bổ sung thêm ô tìm kiếm kênh.
+- Cần kiểm tra lại visitor mode
+- 

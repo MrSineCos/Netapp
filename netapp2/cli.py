@@ -210,8 +210,13 @@ def cli_loop(command_queue: Queue, response_queue: Queue):
                 break
 
 def main():
+
+    # Uncomment the port line below to ask for port in CLI mode
     port = int(input("Enter port for your node: "))
     
+    # Không hỏi port ở đây nữa, để UI nhập port
+    # port = 0  # Giá trị placeholder, UI sẽ nhập port thực tế
+
     # Start in visitor mode by default
     username = ""
     status = "online"
@@ -225,9 +230,11 @@ def main():
     agent_proc.start()
 
     # CLI handles command input
+    # Uncomment the line below to use CLI mode
     # cli_loop(command_queue, response_queue)
+    
     # --- Thay thế CLI bằng giao diện UI ---
-    run_chat_ui(command_queue, response_queue)
+    # run_chat_ui(command_queue, response_queue)
 
     agent_proc.join()
 

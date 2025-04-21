@@ -282,9 +282,13 @@ def handle_client(conn):
                                 print(f"[Tracker] Username changed for peer at {ip}:{port} from {p.username} to {username}")
                                 p.username = username
                             
+                            # Nếu trạng thái là offline, cập nhật ngay lập tức
+                            if status == "offline":
+                                p.status = "offline"
+                                print(f"[Tracker] Peer {username} at {ip}:{port} set to offline by client exit")
                             # Chỉ cập nhật trạng thái nếu peer đã đăng ký là trạng thái khác "offline"
                             # hoặc nếu trạng thái mới là "online" (peer đang báo là đã online lại)
-                            if status != "offline" or p.status == "offline":
+                            elif status != "offline" or p.status == "offline":
                                 p.status = status
                             
                             p.update_last_seen()
@@ -534,7 +538,13 @@ def handle_client(conn):
                 print(f"[Tracker] Sent debug info for {len(debug_info)} channels")
                 
     except Exception as e:
-        print(f"[Tracker] Client handling error: {e}")
+        # Chỉ in lỗi nếu không phải lỗi đóng kết nối thông thường
+        if isinstance(e, ConnectionResetError) or isinstance(e, ConnectionAbortedError) or (
+            hasattr(e, 'winerror') and e.winerror == 10053
+        ):
+            print("[Tracker] Client disconnected.")
+        else:
+            print(f"[Tracker] Client handling error: {e}")
     finally:
         conn.close()
 

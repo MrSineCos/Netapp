@@ -666,7 +666,28 @@ class Agent:
         try:
             if not cmd:
                 return response
-                
+
+            # --- Thêm xử lý lệnh set_port ---
+            if cmd.startswith("set_port "):
+                try:
+                    new_port = int(cmd.split(" ", 1)[1])
+                    self.port = new_port
+                    print(f"[Agent] Port updated to {new_port} from UI")
+                    response = {
+                        "status": "ok",
+                        "message": f"Port updated to {new_port}",
+                        "username": self.username,
+                        "status_value": self.status
+                    }
+                except Exception as e:
+                    response = {
+                        "status": "error",
+                        "message": f"Invalid port: {e}",
+                        "username": self.username,
+                        "status_value": self.status
+                    }
+                return response
+
             cmd_parts = cmd.split(' ', 1)
             action = cmd_parts[0].lower()
             params = cmd_parts[1] if len(cmd_parts) > 1 else ""
@@ -674,6 +695,20 @@ class Agent:
             # Commands available even when not authenticated
             if action == "exit" or action == "quit":
                 print("[Agent] Shutting down...")
+
+                # --- Gửi thông báo offline tới tracker khi thoát ---
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(3)
+                    s.connect((TRACKER_IP, TRACKER_PORT))
+                    # Sử dụng self.username, không dùng biến username cục bộ
+                    offline_username = self.username or "visitor"
+                    s.send(f"send_info {MY_IP} {self.port} {offline_username} offline\n".encode())
+                    s.close()
+                    print(f"[Agent] Notified tracker: {offline_username} is offline")
+                except Exception as e:
+                    print(f"[Agent] Error notifying tracker about offline status: {e}")
+
                 response = {"status": "exit", "message": "Agent shutting down", "username": self.username, "status_value": self.status}
             
             elif action.startswith("login:"):
@@ -692,16 +727,16 @@ class Agent:
                 # Đồng bộ dữ liệu đầy đủ từ tracker ngay sau khi đăng nhập
                 if self.status != "offline":
                     print(f"[Agent] Performing initial data synchronization for user {username}")
-                    # Sử dụng phương thức đồng bộ tin nhắn offline đã cải tiến
                     sync_result = self.sync_all(sync_type="offline")
                     if sync_result:
                         print("[Agent] Initial synchronization successful")
                     else:
                         print("[Agent] Warning: Issues occurred during initial synchronization")
                 
+                # Đảm bảo trả về đúng username
                 response = {
                     "status": "ok",
-                    "message": f"Logged in as {username}",
+                    "message": f"Logged in as {self.username}",
                     "username": self.username,
                     "status_value": self.status
                 }
@@ -1044,126 +1079,129 @@ class Agent:
             
             elif action == "send" and params:
                 try:
-                    parts = params.split(' ', 1)
-                    if len(parts) < 2:
-                        response = {
-                            "status": "error",
-                            "message": "Invalid send command. Use 'send <channel> <message>'",
-                            "username": self.username,
-                            "status_value": self.status
-                        }
-                    else:
-                        channel_name = parts[0].strip()
-                        message_content = parts[1].strip()
-                        
-                        print(f"[Agent] Trying to send message '{message_content}' to channel '{channel_name}'")
-                        
-                        # Verify channel exists and user is member
-                        user_channels = self.data_manager.get_user_channels(self.username)
-                        if channel_name not in user_channels:
-                            print(f"[Agent] Cannot send message: not in channel {channel_name}")
+                    if self.is_authenticated:
+                        parts = params.split(' ', 1)
+                        if len(parts) < 2:
                             response = {
                                 "status": "error",
-                                "message": f"You are not a member of channel {channel_name}",
+                                "message": "Invalid send command. Use 'send <channel> <message>'",
                                 "username": self.username,
                                 "status_value": self.status
                             }
                         else:
-                            # Add message locally với trạng thái ban đầu là pending
-                            message = self.add_message_to_channel(self.username, message_content, channel_name)
-                            if not message:
-                                print(f"[Agent] Failed to add message to local channel {channel_name}")
+                            channel_name = parts[0].strip()
+                            message_content = parts[1].strip()
+                            
+                            print(f"[Agent] Trying to send message '{message_content}' to channel '{channel_name}'")
+                            
+                            # Verify channel exists and user is member
+                            user_channels = self.data_manager.get_user_channels(self.username)
+                            if channel_name not in user_channels:
+                                print(f"[Agent] Cannot send message: not in channel {channel_name}")
                                 response = {
                                     "status": "error",
-                                    "message": f"Failed to add message to channel {channel_name}",
+                                    "message": f"You are not a member of channel {channel_name}",
                                     "username": self.username,
                                     "status_value": self.status
                                 }
-                                return response
-                            
-                            # Biến theo dõi trạng thái gửi
-                            sent_successfully = False
-                            
-                            try:
-                                # Get the channel object
-                                channel = self.data_manager.get_channel(channel_name)
-                                if not channel:
-                                    print(f"[Agent] Could not retrieve channel {channel_name} for message sending")
+                            else:
+                                # Add message locally với trạng thái ban đầu là pending
+                                message = self.add_message_to_channel(self.username, message_content, channel_name)
+                                if not message:
+                                    print(f"[Agent] Failed to add message to local channel {channel_name}")
                                     response = {
                                         "status": "error",
-                                        "message": f"Failed to retrieve channel for message sending",
+                                        "message": f"Failed to add message to channel {channel_name}",
                                         "username": self.username,
                                         "status_value": self.status
                                     }
                                     return response
                                 
-                                # Chuẩn bị dữ liệu tin nhắn để gửi đi
-                                message_data = {
-                                    "type": "message",
-                                    "channel": channel_name,
-                                    "content": message_content,
-                                    "sender": self.username,
-                                    "timestamp": message.timestamp  # Use the same timestamp for consistency
-                                }
+                                # Biến theo dõi trạng thái gửi
+                                sent_successfully = False
                                 
-                                # Kiểm tra xem đang online hay offline
-                                print(f"[Agent] Checking online status before sending message...")
-                                print(f"[Agent] Current status: {self.status}")
-                                is_online = self.check_online_status()
-                                print(f"[Agent] Online check result: {is_online}")
-                                
-                                if is_online:
-                                    # Get peers from tracker
-                                    peers = self.register_to_tracker(get_peers=True)
+                                try:
+                                    # Get the channel object
+                                    channel = self.data_manager.get_channel(channel_name)
+                                    if not channel:
+                                        print(f"[Agent] Could not retrieve channel {channel_name} for message sending")
+                                        response = {
+                                            "status": "error",
+                                            "message": f"Failed to retrieve channel for message sending",
+                                            "username": self.username,
+                                            "status_value": self.status
+                                        }
+                                        return response
                                     
-                                    # Send to all peers in the channel
-                                    sent_count = 0
-                                    for peer in peers:
-                                        if peer["username"] != self.username and peer["username"] in channel.get_all_users():
+                                    # Chuẩn bị dữ liệu tin nhắn để gửi đi
+                                    message_data = {
+                                        "type": "message",
+                                        "channel": channel_name,
+                                        "content": message_content,
+                                        "sender": self.username,
+                                        "timestamp": message.timestamp  # Use the same timestamp for consistency
+                                    }
+                                    
+                                    # Kiểm tra xem đang online hay offline
+                                    print(f"[Agent] Checking online status before sending message...")
+                                    print(f"[Agent] Current status: {self.status}")
+                                    is_online = self.check_online_status()
+                                    print(f"[Agent] Online check result: {is_online}")
+                                    
+                                    if is_online:
+                                        # Get peers from tracker
+                                        peers = self.register_to_tracker(get_peers=True)
+                                        
+                                        # Send to all peers in the channel
+                                        sent_count = 0
+                                        for peer in peers:
+                                            if peer["username"] != self.username and peer["username"] in channel.get_all_users():
+                                                try:
+                                                    send_to_peer(peer["ip"], int(peer["port"]), json.dumps(message_data))
+                                                    sent_count += 1
+                                                    sent_successfully = True
+                                                except Exception as e:
+                                                    print(f"[Agent] Error sending message to peer {peer['username']}: {e}")
+                                        
+                                        print(f"[Agent] Message sent to {sent_count} peers in channel {channel_name}")
+                                        
+                                        # Nếu là host của channel, hoặc không gửi được đến peer nào, thử đồng bộ với tracker
+                                        if channel.host == self.username or sent_count == 0:
                                             try:
-                                                send_to_peer(peer["ip"], int(peer["port"]), json.dumps(message_data))
-                                                sent_count += 1
-                                                sent_successfully = True
+                                                print(f"[Agent] Attempting to sync channel {channel_name} with tracker")
+                                                if channel.host == self.username:
+                                                    tracker_sync = self.sync_all(channel_name=channel_name, sync_type="normal")
+                                                else:
+                                                    tracker_sync = self.sync_all(channel_name=channel_name, sync_type="non_hosted")
+                                                    
+                                                if tracker_sync:
+                                                    sent_successfully = True
+                                                    print(f"[Agent] Successfully synced message with tracker")
+                                                else:
+                                                    print(f"[Agent] Failed to sync message with tracker")
                                             except Exception as e:
-                                                print(f"[Agent] Error sending message to peer {peer['username']}: {e}")
+                                                print(f"[Agent] Error syncing with tracker: {e}")
+                                    else:
+                                        print(f"[Agent] Agent is offline. Message will remain in 'pending' status.")
                                     
-                                    print(f"[Agent] Message sent to {sent_count} peers in channel {channel_name}")
+                                    # Cập nhật trạng thái tin nhắn nếu đã gửi thành công
+                                    if sent_successfully:
+                                        message.update_status("sent")
+                                        self.data_manager.save_channel(channel_name)
+                                        print(f"[Agent] Message status updated to 'sent'")
                                     
-                                    # Nếu là host của channel, hoặc không gửi được đến peer nào, thử đồng bộ với tracker
-                                    if channel.host == self.username or sent_count == 0:
-                                        try:
-                                            print(f"[Agent] Attempting to sync channel {channel_name} with tracker")
-                                            if channel.host == self.username:
-                                                tracker_sync = self.sync_all(channel_name=channel_name, sync_type="normal")
-                                            else:
-                                                tracker_sync = self.sync_all(channel_name=channel_name, sync_type="non_hosted")
-                                                
-                                            if tracker_sync:
-                                                sent_successfully = True
-                                                print(f"[Agent] Successfully synced message with tracker")
-                                            else:
-                                                print(f"[Agent] Failed to sync message with tracker")
-                                        except Exception as e:
-                                            print(f"[Agent] Error syncing with tracker: {e}")
-                                else:
-                                    print(f"[Agent] Agent is offline. Message will remain in 'pending' status.")
+                                except Exception as e:
+                                    print(f"[Agent] Error sending message to peers: {e}")
+                                    # Vẫn coi là thành công nếu lưu cục bộ được, nhưng không cập nhật trạng thái
                                 
-                                # Cập nhật trạng thái tin nhắn nếu đã gửi thành công
-                                if sent_successfully:
-                                    message.update_status("sent")
-                                    self.data_manager.save_channel(channel_name)
-                                    print(f"[Agent] Message status updated to 'sent'")
-                                
-                            except Exception as e:
-                                print(f"[Agent] Error sending message to peers: {e}")
-                                # Vẫn coi là thành công nếu lưu cục bộ được, nhưng không cập nhật trạng thái
-                            
-                            response = {
-                                "status": "ok",
-                                "message": f"Message {'sent' if sent_successfully else 'queued'} to channel {channel_name}",
-                                "username": self.username,
-                                "status_value": self.status
-                            }
+                                response = {
+                                    "status": "ok",
+                                    "message": f"Message {'sent' if sent_successfully else 'queued'} to channel {channel_name}",
+                                    "username": self.username,
+                                    "status_value": self.status
+                                }
+                    else:
+                        print(f"Cannot send message in visitor mode")
                 except Exception as e:
                     print(f"[Agent] Error processing send command: {e}")
                     response = {
@@ -1539,13 +1577,21 @@ def agent_main(command_queue: Queue, my_port: int, username: str = "", status: s
                     # Reset trạng thái online
                     if agent.status == "offline":
                         print("[Agent] Updating status from offline to online")
-                        agent.status = "online"
-                        # Register lại với tracker với trạng thái mới
+                        result = agent.handle_command("status online")
+                        if response_queue:
+                            # Đánh dấu response này là tự động
+                            if isinstance(result, dict):
+                                result["auto"] = True
+                            response_queue.put(result)
                         agent.register_to_tracker()
-                    # Đồng bộ dữ liệu với tracker
                     agent.sync_all(sync_type="reconnect")
-
-
+                elif tracker_connected and not current_connection:
+                    print("[Agent] Lost connection to tracker!")
+                    result = agent.handle_command("status offline")
+                    if response_queue:
+                        if isinstance(result, dict):
+                            result["auto"] = True
+                        response_queue.put(result)
                 # Cập nhật trạng thái kết nối
                 tracker_connected = current_connection
         
