@@ -5,6 +5,15 @@ import json
 import os
 import time
 from datetime import datetime
+import logging
+
+# Thiết lập logging để ghi ra file app.log dùng chung
+logging.basicConfig(
+    filename='tracker.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 class Peer:
     def __init__(self, ip, port, username, status):
@@ -73,7 +82,7 @@ class Channel:
         self.messages = []
         self.members = set()
         self.members.add(host)  # Add host as member
-        print(f"[Tracker] Created channel {name} with host {host}")
+        logging.info(f"[Channel] Created channel {name} with host {host}")
 
     def add_message(self, message_data):
         message = Message(
@@ -87,24 +96,24 @@ class Channel:
         # Sắp xếp tin nhắn theo thời gian sau khi thêm
         try:
             self.messages.sort(key=lambda msg: msg.timestamp)
-            print(f"[Tracker] Messages sorted by timestamp after adding new message to channel {self.name}")
+            logging.info(f"[Channel] Messages sorted by timestamp after adding new message to channel {self.name}")
         except Exception as e:
-            print(f"[Tracker] Error sorting messages: {e}")
+            logging.error(f"[Channel] Error sorting messages: {e}")
             
-        print(f"[Tracker] Added message from {message.sender} to channel {self.name}")
+        logging.info(f"[Channel] Added message from {message.sender} to channel {self.name}")
         self.save_to_disk()
         return message
 
     def add_member(self, username):
         if username and username != "visitor":
             self.members.add(username)
-            print(f"[Tracker] Added member {username} to channel {self.name}")
+            logging.info(f"[Channel] Added member {username} to channel {self.name}")
             self.save_to_disk()
 
     def remove_member(self, username):
         if username in self.members:
             self.members.discard(username)
-            print(f"[Tracker] Removed member {username} from channel {self.name}")
+            logging.info(f"[Channel] Removed member {username} from channel {self.name}")
             self.save_to_disk()
 
     def to_dict(self):
@@ -122,6 +131,7 @@ class Channel:
         # Save channel data to JSON file
         with open(f"data/{self.name}.json", "w") as f:
             json.dump(self.to_dict(), f, indent=2)
+        logging.info(f"[Channel] Saved channel {self.name} to disk")
 
     @classmethod
     def load_from_disk(cls, channel_name):
@@ -135,9 +145,9 @@ class Channel:
                 # Sắp xếp tin nhắn theo thời gian
                 try:
                     channel.messages.sort(key=lambda msg: msg.timestamp)
-                    print(f"[Tracker] Messages sorted by timestamp after loading channel {channel_name}")
+                    logging.info(f"[Channel] Messages sorted by timestamp after loading channel {channel_name}")
                 except Exception as e:
-                    print(f"[Tracker] Error sorting messages for channel {channel_name}: {e}")
+                    logging.error(f"[Channel] Error sorting messages for channel {channel_name}: {e}")
                 
                 return channel
         except (FileNotFoundError, json.JSONDecodeError):
@@ -153,7 +163,7 @@ def load_channels():
     global channels
     if not os.path.exists("data"):
         os.makedirs("data", exist_ok=True)
-        print("[Tracker] Created data directory")
+        logging.info("[Tracker] Created data directory")
         return
         
     try:
@@ -165,9 +175,9 @@ def load_channels():
                 if channel:
                     with channel_lock:
                         channels[channel_name] = channel
-                        print(f"[Tracker] Loaded channel {channel_name} with {len(channel.messages)} messages")
+                        logging.info(f"[Tracker] Loaded channel {channel_name} with {len(channel.messages)} messages")
     except Exception as e:
-        print(f"[Tracker] Error loading channels: {e}")
+        logging.error(f"[Tracker] Error loading channels: {e}")
 
 def check_peer_status(peer):
     """Kiểm tra trạng thái của peer bằng cách kết nối tới nó"""
@@ -189,15 +199,15 @@ def update_peer_status():
                 offline_peers = []
                 for i, peer in enumerate(peer_list):
                     # Chỉ kiểm tra các peer mà status là "online" hoặc đã lâu không thấy
-                    if peer.status == "online" or peer.is_likely_offline():
+                    if peer.status == "online" or peer.is_likely_offline() or peer.status == "invisible":
                         # Nếu peer đã lâu không được thấy, kiểm tra trạng thái
                         if peer.is_likely_offline():
                             is_online = check_peer_status(peer)
                             if not is_online and peer.status != "offline":
-                                print(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is now offline")
+                                logging.info(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is now offline")
                                 peer.status = "offline"
                             elif is_online and peer.status == "offline":
-                                print(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is back online")
+                                logging.info(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is back online")
                                 peer.status = "online"
                                 peer.update_last_seen()
                         
@@ -208,12 +218,12 @@ def update_peer_status():
                 # Xóa các peer đã offline quá lâu (từ cuối danh sách để tránh lỗi index)
                 for idx in sorted(offline_peers, reverse=True):
                     removed_peer = peer_list.pop(idx)
-                    print(f"[Tracker] Removed inactive peer: {removed_peer.username} ({removed_peer.ip}:{removed_peer.port})")
+                    logging.info(f"[Tracker] Removed inactive peer: {removed_peer.username} ({removed_peer.ip}:{removed_peer.port})")
             
             # Tạm dừng để tránh dùng quá nhiều CPU
             time.sleep(30)  # Kiểm tra mỗi 30 giây
         except Exception as e:
-            print(f"[Tracker] Error in status updating thread: {e}")
+            logging.error(f"[Tracker] Error in status updating thread: {e}")
             time.sleep(30)  # Nếu có lỗi, vẫn đợi trước khi thử lại
 
 def ping_peer(peer):
@@ -248,14 +258,14 @@ def handle_client(conn):
                         with channel_lock:
                             if channel_name in channels and username:
                                 channels[channel_name].add_member(username)
-                                print(f"[Tracker] Added member {username} to channel {channel_name} via join_channel")
+                                logging.info(f"[Tracker] Added member {username} to channel {channel_name} via join_channel")
                                 channels[channel_name].save_to_disk()
                                 conn.send(b"OK\n")
                             else:
                                 conn.send(b"ERROR: Channel not found or invalid username\n")
                         continue
                 except Exception as e:
-                    print(f"[Tracker] Error processing join_channel: {e}")
+                    logging.error(f"[Tracker] Error processing join_channel: {e}")
                     conn.send(b"ERROR: Invalid join_channel message\n")
                     continue
             # --- Kết thúc bổ sung ---
@@ -279,25 +289,25 @@ def handle_client(conn):
                         if p.ip == ip and p.port == port:
                             # Nếu username thay đổi, cập nhật
                             if p.username != username:
-                                print(f"[Tracker] Username changed for peer at {ip}:{port} from {p.username} to {username}")
+                                logging.info(f"[Tracker] Username changed for peer at {ip}:{port} from {p.username} to {username}")
                                 p.username = username
                             
                             # Nếu trạng thái là offline, cập nhật ngay lập tức
                             if status == "offline":
                                 p.status = "offline"
-                                print(f"[Tracker] Peer {username} at {ip}:{port} set to offline by client exit")
+                                logging.info(f"[Tracker] Peer {username} at {ip}:{port} set to offline by client exit")
                             # Chỉ cập nhật trạng thái nếu peer đã đăng ký là trạng thái khác "offline"
                             # hoặc nếu trạng thái mới là "online" (peer đang báo là đã online lại)
                             elif status != "offline" or p.status == "offline":
                                 p.status = status
                             
                             p.update_last_seen()
-                            print(f"[Tracker] Updated peer {username} at {ip}:{port} with status {p.status}")
+                            logging.info(f"[Tracker] Updated peer {username} at {ip}:{port} with status {p.status}")
                             break
                     else:
                         # Peer mới
                         peer_list.append(new_peer)
-                        print(f"[Tracker] Registered new peer {username} at {ip}:{port} with status {status}")
+                        logging.info(f"[Tracker] Registered new peer {username} at {ip}:{port} with status {status}")
                 
                 if get_peers:
                     # Trả về danh sách peers ngay lập tức
@@ -313,6 +323,7 @@ def handle_client(conn):
                     # Send peer list as JSON
                     peer_data = [p.to_dict() for p in peer_list]
                 conn.send(json.dumps(peer_data).encode() + b'\n')
+                logging.info(f"[Tracker] Sent list of {len(peer_data)} peers")
                 
             elif cmd == "ping":
                 # Phản hồi lại ping từ client
@@ -365,7 +376,7 @@ def handle_client(conn):
                     
                     # If JSON is incomplete, keep reading until it's complete
                     while open_braces > close_braces:
-                        print(f"[Tracker] JSON incomplete, reading more data ({open_braces} vs {close_braces})")
+                        logging.info(f"[Tracker] JSON incomplete, reading more data ({open_braces} vs {close_braces})")
                         
                         # Set a timeout for the socket to avoid hanging
                         conn.settimeout(5.0)
@@ -378,18 +389,18 @@ def handle_client(conn):
                             open_braces = json_buffer.count('{')
                             close_braces = json_buffer.count('}')
                         except socket.timeout:
-                            print("[Tracker] Timeout while reading JSON data")
+                            logging.warning("[Tracker] Timeout while reading JSON data")
                             break
                     
                     # Reset timeout
                     conn.settimeout(None)
                     
                     # Now try to parse the complete JSON
-                    print(f"[Tracker] Received complete JSON data ({len(json_buffer)} bytes)")
+                    logging.info(f"[Tracker] Received complete JSON data ({len(json_buffer)} bytes)")
                     channel_data = json.loads(json_buffer)
                     channel_name = channel_data["name"]
                     
-                    print(f"[Tracker] Received sync request for channel {channel_name}")
+                    logging.info(f"[Tracker] Received sync request for channel {channel_name}")
                     
                     # Kiểm tra xem sender có phải là host không
                     sender_is_host = False
@@ -404,7 +415,7 @@ def handle_client(conn):
                                 sender_port = peer.port
                                 break
                     
-                    print(f"[Tracker] Sync request from {sender_username if sender_username else 'unknown'} ({sender_ip})")
+                    logging.info(f"[Tracker] Sync request from {sender_username if sender_username else 'unknown'} ({sender_ip})")
                     
                     # Sử dụng channel_lock để đảm bảo thread-safe khi truy cập và sửa đổi channels
                     with channel_lock:
@@ -412,16 +423,16 @@ def handle_client(conn):
                         if channel_name in channels:
                             if sender_username and sender_username == channels[channel_name].host:
                                 sender_is_host = True
-                                print(f"[Tracker] Sender is the host of channel {channel_name}")
+                                logging.info(f"[Tracker] Sender is the host of channel {channel_name}")
                         
                         if channel_name not in channels:
-                            print(f"[Tracker] Creating new channel {channel_name} from sync")
+                            logging.info(f"[Tracker] Creating new channel {channel_name} from sync")
                             channels[channel_name] = Channel(channel_name, channel_data["host"])
                         
                         # Nếu người gửi không phải là host, chỉ thêm tin nhắn mới
                         # Giữ nguyên thông tin host và members
                         if not sender_is_host:
-                            print(f"[Tracker] Non-host sync from {sender_username}, preserving host and member data")
+                            logging.info(f"[Tracker] Non-host sync from {sender_username}, preserving host and member data")
                             
                             # Cho phép client không phải host đồng bộ tin nhắn bất kể host có online hay không
                             host_is_online = False
@@ -430,12 +441,12 @@ def handle_client(conn):
                             if host_username:
                                 with peer_lock:
                                     for peer in peer_list:
-                                        if peer.username == host_username and peer.status == "online":
+                                        if peer.username == host_username and (peer.status == "online" or peer.status == "invisible"):
                                             host_is_online = True
                                             break
                             
                             if host_is_online:
-                                print(f"[Tracker] Host {host_username} is online, but accepting non-host message sync")
+                                logging.info(f"[Tracker] Host {host_username} is online, but accepting non-host message sync")
                             
                             # Chỉ thêm tin nhắn mới từ client không phải host
                             if "messages" in channel_data and channel_data["messages"]:
@@ -451,7 +462,7 @@ def handle_client(conn):
                                         channels[channel_name].add_message(msg)
                                         new_messages += 1
                                 
-                                print(f"[Tracker] Added {new_messages} new messages from non-host client {sender_username}")
+                                logging.info(f"[Tracker] Added {new_messages} new messages from non-host client {sender_username}")
                         else:
                             # Update channel data
                             channels[channel_name].host = channel_data["host"]
@@ -476,18 +487,18 @@ def handle_client(conn):
                                         channels[channel_name].add_message(msg)
                                         new_messages += 1
                                 
-                                print(f"[Tracker] Added {new_messages} messages from host {sender_username}")
+                                logging.info(f"[Tracker] Added {new_messages} messages from host {sender_username}")
                         
                         # Save to disk
                         channels[channel_name].save_to_disk()
                         conn.send(b"OK\n")
-                        print(f"[Tracker] Synced channel {channel_name} with {len(channels[channel_name].messages)} messages")
+                        logging.info(f"[Tracker] Synced channel {channel_name} with {len(channels[channel_name].messages)} messages")
                 except json.JSONDecodeError as e:
-                    print(f"[Tracker] JSON decode error: {e}")
-                    print(f"[Tracker] Received data: {' '.join(parts[1:])}")
+                    logging.error(f"[Tracker] JSON decode error: {e}")
+                    logging.error(f"[Tracker] Received data: {' '.join(parts[1:])}")
                     conn.send(b"ERROR: Invalid JSON\n")
                 except Exception as e:
-                    print(f"[Tracker] Error during sync: {str(e)}")
+                    logging.error(f"[Tracker] Error during sync: {str(e)}")
                     conn.send(f"ERROR: {str(e)}\n".encode())
                     
             elif cmd == "get_channel":
@@ -499,12 +510,12 @@ def handle_client(conn):
                         if channel_name in channels:
                             channel_data = channels[channel_name].to_dict()
                             conn.send(json.dumps(channel_data).encode() + b'\n')
-                            print(f"[Tracker] Sent channel {channel_name} data with {len(channel_data['messages'])} messages")
+                            logging.info(f"[Tracker] Sent channel {channel_name} data with {len(channel_data['messages'])} messages")
                         else:
                             conn.send(b"ERROR: Channel not found\n")
-                            print(f"[Tracker] Channel {channel_name} not found on request")
+                            logging.warning(f"[Tracker] Channel {channel_name} not found on request")
                 except Exception as e:
-                    print(f"[Tracker] Error sending channel data: {str(e)}")
+                    logging.error(f"[Tracker] Error sending channel data: {str(e)}")
                     conn.send(f"ERROR: {str(e)}\n".encode())
                     
             elif cmd == "list_channels":
@@ -520,7 +531,7 @@ def handle_client(conn):
                             "messages": len(channel.messages)
                         })
                 conn.send(json.dumps(channel_list).encode() + b'\n')
-                print(f"[Tracker] Sent list of {len(channel_list)} channels")
+                logging.info(f"[Tracker] Sent list of {len(channel_list)} channels")
                 
             elif cmd == "debug":
                 # Debug command to list all channels
@@ -535,16 +546,16 @@ def handle_client(conn):
                             "message_count": len(channel.messages)
                         })
                 conn.send(json.dumps(debug_info).encode() + b'\n')
-                print(f"[Tracker] Sent debug info for {len(debug_info)} channels")
+                logging.info(f"[Tracker] Sent debug info for {len(debug_info)} channels")
                 
     except Exception as e:
         # Chỉ in lỗi nếu không phải lỗi đóng kết nối thông thường
         if isinstance(e, ConnectionResetError) or isinstance(e, ConnectionAbortedError) or (
             hasattr(e, 'winerror') and e.winerror == 10053
         ):
-            print("[Tracker] Client disconnected.")
+            logging.info("[Tracker] Client disconnected.")
         else:
-            print(f"[Tracker] Client handling error: {e}")
+            logging.error(f"[Tracker] Client handling error: {e}")
     finally:
         conn.close()
 
@@ -555,12 +566,14 @@ def main():
     # Bắt đầu thread kiểm tra trạng thái
     status_thread = threading.Thread(target=update_peer_status, daemon=True)
     status_thread.start()
-    print("[Tracker] Started peer status monitoring thread")
+    logging.info("[Tracker] Started peer status monitoring thread")
     
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Avoid bind errors
-    server.bind(("0.0.0.0", 12345))
+    server.bind(("0.0.0.0", 12345))  # Lắng nghe trên mọi IP, cho phép các máy khác truy cập
+    # Lưu ý: Các client phải kết nối bằng IP LAN thực tế của máy chủ tracker (ví dụ "192.168.x.x"), không dùng "127.0.0.1" hoặc "localhost".
     server.listen()
+    logging.info("Tracker is running on port 12345...")
     print("Tracker is running on port 12345...")
 
     try:
@@ -568,7 +581,7 @@ def main():
             conn, addr = server.accept()
             threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
     except KeyboardInterrupt:
-        print("\n[Tracker] Shutting down gracefully...")
+        logging.info("[Tracker] Shutting down gracefully...")
         server.close()
 
 if __name__ == "__main__":

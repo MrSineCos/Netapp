@@ -1,7 +1,26 @@
 {
   "name": "cos2_c",
   "host": "cos",
-  "members": [],
-  "visitors": [],
-  "messages": []
+  "members": [
+    "cos"
+  ],
+  "visitors": [
+    "visitor"
+  ],
+  "messages": [
+    {
+      "sender": "cos",
+      "content": "bonjour",
+      "channel": "cos2_c",
+      "timestamp": "2025-04-24 10:17:22.738058",
+      "status": "sent"
+    },
+    {
+      "sender": "cos",
+      "content": "hi 10:18",
+      "channel": "cos2_c",
+      "timestamp": "2025-04-24 10:18:10.093216",
+      "status": "received"
+    }
+  ]
 }

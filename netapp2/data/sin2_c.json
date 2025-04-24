@@ -1,9 +1,0 @@
-{
-  "name": "sin2_c",
-  "host": "sin",
-  "members": [
-    "sin"
-  ],
-  "visitors": [],
-  "messages": []
-}

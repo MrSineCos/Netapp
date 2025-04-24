@@ -2,65 +2,68 @@
   "name": "sin_c",
   "host": "sin",
   "members": [
+    "cos",
     "sin"
   ],
-  "visitors": [],
+  "visitors": [
+    "visitor"
+  ],
   "messages": [
     {
       "sender": "sin",
-      "content": "halo 12:02",
+      "content": "hello",
       "channel": "sin_c",
-      "timestamp": "2025-04-21 00:02:09.315407",
+      "timestamp": "2025-04-23 22:37:18.913302",
+      "status": "received"
+    },
+    {
+      "sender": "cos",
+      "content": "hey",
+      "channel": "sin_c",
+      "timestamp": "2025-04-23 23:45:12.030946",
       "status": "sent"
     },
     {
       "sender": "sin",
-      "content": "hi 12:02",
+      "content": "Welcome to channel sin_c! You joined as a visitor (read-only).",
       "channel": "sin_c",
-      "timestamp": "2025-04-21 00:02:46.080885",
-      "status": "sent"
+      "timestamp": "2025-04-23T23:21:29.992270",
+      "status": "received"
+    },
+    {
+      "sender": "cos",
+      "content": "how are you",
+      "channel": "sin_c",
+      "timestamp": "2025-04-24 10:19:56.730713",
+      "status": "received"
     },
     {
       "sender": "sin",
-      "content": "hi 9:39",
+      "content": "tu vas ou",
       "channel": "sin_c",
-      "timestamp": "2025-04-21 09:39:27.998589",
+      "timestamp": "2025-04-24 10:20:02.444412",
       "status": "sent"
     },
     {
-      "sender": "sin",
-      "content": "hi 9:40",
+      "sender": "cos",
+      "content": "j'etudie a l'universite",
       "channel": "sin_c",
-      "timestamp": "2025-04-21 09:40:37.589884",
-      "status": "sent"
+      "timestamp": "2025-04-24 10:20:20.928864",
+      "status": "received"
     },
     {
       "sender": "sin",
-      "content": "hi 9:52",
+      "content": "tu vas bien",
       "channel": "sin_c",
-      "timestamp": "2025-04-21 09:52:45.421685",
+      "timestamp": "2025-04-24 10:20:32.573745",
       "status": "sent"
     },
     {
-      "sender": "sin",
-      "content": "bonjour 10:00",
+      "sender": "cos",
+      "content": "ca va",
       "channel": "sin_c",
-      "timestamp": "2025-04-21 10:00:06.476612",
-      "status": "sent"
-    },
-    {
-      "sender": "sin",
-      "content": "hi 11:42",
-      "channel": "sin_c",
-      "timestamp": "2025-04-21 11:42:32.430510",
-      "status": "sent"
-    },
-    {
-      "sender": "sin",
-      "content": "hi 2:07",
-      "channel": "sin_c",
-      "timestamp": "2025-04-21 14:08:01.402615",
-      "status": "sent"
+      "timestamp": "2025-04-24 10:20:36.407960",
+      "status": "received"
     }
   ]
 }
