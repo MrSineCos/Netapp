@@ -67,3 +67,8 @@ hoặc có thể tạo thêm nút join để join kênh đó thì mới thêm k�
 - hoặc có thể bổ sung thêm ô tìm kiếm kênh.
 - Cần kiểm tra lại visitor mode
 - 
+
+24/4:
+- visitor không thể tham gia kênh (chỉ có thể tham gia kênh đối với kênh lưu trong cục bộ )
+-> Lỗi ở hàm join_channel trong datamanager
+- lỗi bật invisible_mode (xuất phát từ chat_ui.py), nhưng khi login thì tracker lại nhận được là online, lỗi có thể xuất phát từ agent khi gửi thông tin đăng nhập hoặc traker xử lí sai khi nhận invisible status

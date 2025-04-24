@@ -1,9 +1,10 @@
 *Authentication mode (visitor view and user view) và các chức năng cơ bản (dưới dạng CLI)
 - Visitor:
+    + Có thể nhập tên cho visitor: 
     + Read-only: ok
     + Join kênh: ok
     + Leave kênh: 
-    + history chat: ? (phân vân ko bik có nên thêm vô ko)
+    + Ko xem được history chat: ok (phân vân ko bik có nên thêm vô ko)
     + Liệt kê user (danh sách và state user): ok
     + List_all (liệt kê channels):
         - Tên kênh: ok
@@ -12,16 +13,20 @@
     + Thoát chương trình: ok
 
 - Chuyển từ trạng thái visitor sang user:
-    + Đồng bộ tin nhắn:
+    + Đồng bộ tin nhắn (chỉ lấy các tin nhắn mà user là host hoặc member):
         - Lên tracker (chỉ gửi các tin nhắn có status pending): ok
         - Từ tracker xuống (fetch lấy lịch sử tin nhắn): ok
         - Lên các client peer đang online: ok
     + Cập nhật trạng thái và tên người dùng lên tracker: ok
-
 - Chuyển từ user sang visitor:
     + Cập nhật trạng thái và tên người dùng lên tracker: ok
 
 - User:
+    + Status:
+        - Tự động cập nhật định kì với server: ok
+        - Tự động cập nhật hiển thị trạng thái khi trạng thái thay đổi: ok
+        - Hiển thị trạng thái online/offline trên UI: ok
+        - Hiển thị trạng thái offline trong invisible mode: 
     + chat: 
         - Nhận:
             + Client host: ok
@@ -102,7 +107,7 @@
         - Kênh join/create success or fail:
         - Đồng bộ hay chưa đồng bộ: 
     + Nút tạo/rời kênh, nhập tên kênh muốn tạo:
-
+- File Log (phân biệt tin nhắn từ các file, có tiền tố để phân biệt đến từ class nào): ok
 Extra:
     + Bảo mật tin nhắn (mã hóa):
     + Chiến thuật seeding:

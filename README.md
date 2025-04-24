@@ -28,7 +28,15 @@ python tracker.py
 
 **Chạy bằng giao diện đồ họa (UI):**
 
-Từ thư mục `Sample_code`, chạy lệnh sau trong terminal/cmd:
+Từ thư mục `Sample_code`, bạn có thể chạy lệnh sau trong terminal/cmd:
+
+```bash
+python run_ui.py
+```
+
+**Chạy bằng giao diện dòng lệnh (CLI):**
+
+Nếu muốn sử dụng giao diện dòng lệnh, bạn có thể chạy lệnh sau:
 
 ```bash
 python netapp2\cli.py
@@ -36,6 +44,10 @@ python netapp2\cli.py
 
 - Khi được hỏi `Enter port for your node:`, nhập một số port chưa bị chiếm (ví dụ: 5001, 5002, ...).
 - Giao diện chat sẽ hiện ra, bạn có thể đăng nhập, tạo/join kênh, gửi tin nhắn, đồng bộ, v.v.
+
+**Lưu ý:**  
+- `run_ui.py` là file khởi động nhanh giao diện đồ họa (Tkinter UI) cho ứng dụng peer, giúp đơn giản hóa thao tác chạy app mà không cần chỉnh sửa file `cli.py`.
+- Bạn chỉ cần chạy `python run_ui.py` để sử dụng giao diện đồ họa.
 
 **Chạy nhiều peer trên cùng máy:**
 
@@ -55,7 +67,7 @@ python netapp2\cli.py
 
 ## Cách thức vận hành
 
-- **Tracker**: Một server trung tâm (không nằm trong mã nguồn này) quản lý danh sách peer, trạng thái online/offline, danh sách kênh, host của từng kênh, v.v.
+- **Tracker**: Một server trung tâm quản lý danh sách peer, trạng thái online/offline, danh sách kênh, host của từng kênh, v.v.
 - **Peer/Agent**: Mỗi người dùng chạy một tiến trình agent (node) trên máy của mình, có thể đăng nhập, tạo/join kênh, gửi/nhận tin nhắn.
 - **Giao tiếp**: Các peer giao tiếp trực tiếp với nhau qua TCP socket để gửi tin nhắn, đồng bộ lịch sử, hoặc thông qua tracker để lấy danh sách peer/kênh.
 - **Đồng bộ**: Tin nhắn được lưu cục bộ tại host của kênh và có thể đồng bộ lên tracker hoặc tới các peer khác khi online.
@@ -104,6 +116,11 @@ python netapp2\cli.py
 ### 6. `data_manager.py` (không đính kèm ở đây)
 - **DataManager**: Quản lý dữ liệu cục bộ về kênh, tin nhắn, thành viên, lưu/đọc file JSON.
 - **Message**: Lớp đại diện cho một tin nhắn.
+
+### 7. `run_ui.py`
+- **run_ui.py**: File khởi động nhanh giao diện đồ họa Tkinter cho ứng dụng peer.
+- Khi chạy `python run_ui.py`, chương trình sẽ tự động khởi tạo các thành phần cần thiết và mở giao diện chat UI mà không cần chỉnh sửa các file khác.
+- Thích hợp cho người dùng muốn sử dụng giao diện đồ họa mà không cần thao tác với CLI.
 
 ## Quy trình hoạt động cơ bản
 
