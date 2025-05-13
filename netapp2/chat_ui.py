@@ -113,6 +113,8 @@ class ChatUI:
         self.update_chat_input_state()
         self.update_create_channel_btn_state()
 
+        # Sau khi khởi tạo xong các panel:
+        self.send_command("status check")  # hoặc lệnh phù hợp để agent trả về trạng thái thực tế
         # --- Hiển thị panel settings khi khởi động, ẩn các panel chat ---
         self.show_settings_panel(startup=True)
         # --------------------------------------------------------------
@@ -233,12 +235,11 @@ class ChatUI:
 
         print("[UI] [save_settings] Đang lưu cài đặt...")
         if self.invisible_mode:
-            print("[UI] [save_settings] Đang bật invisible mode")
-            self.send_command("status invisible")
-            self.status = "invisible"
-        else:
-            self.send_command("status online")
-            self.status = "online"
+            if self.status == "online":
+                print("[UI] [save_settings] Đang bật invisible mode")
+                self.send_command("status invisible")
+            else:
+                self.send_command("status online")
         self.update_status_label()
         self.notifications.put("Đã lưu cài đặt.")
 
@@ -309,39 +310,28 @@ class ChatUI:
         """Luôn chạy, lấy và xử lý response từ agent"""
         while self.running:
             try:
-                if not self.response_queue.empty():
-                    resp = self.response_queue.get()
-                    # Bỏ qua response tự động (auto)
-                    if isinstance(resp, dict) and resp.get("auto", False):
-                        # Cập nhật trạng thái nếu có
-                        if "status_value" in resp:
-                            prev_status = self.status
-                            self.status = resp["status_value"]
-                            if self.status != prev_status:
-                                self.update_status_label()
-                            else:
-                                self.update_status_label()
-                        continue
-                    with self.last_response_lock:
-                        self.last_response = resp  # Lưu response cuối cùng
-                    # Xử lý response
-                    if isinstance(resp, dict):
-                        if "status_value" in resp:
-                            self.status = resp["status_value"]
-                            self.update_status_label()
-                        status = resp.get("status", "")
-                        msg = resp.get("message", "")
-                        if status == "ok":
-                            self.notifications.put(msg)
-                        elif status == "error":
-                            self.notifications.put(f"Error: {msg}")
-                            messagebox.showerror("Error", msg)
-                        elif status == "exit":
-                            self.notifications.put(msg)
-                        else:
-                            self.notifications.put(str(resp))
+                # Chỉ chạy khi response_queue không rỗng
+                resp = self.response_queue.get(block=True)  # Chờ đến khi có phần tử trong queue
+                with self.last_response_lock:
+                    self.last_response = resp  # Lưu response cuối cùng
+                # Xử lý response
+                if isinstance(resp, dict):
+                    if "status_value" in resp:
+                        self.status = resp["status_value"]
+                        self.update_status_label()
+                    status = resp.get("status", "")
+                    msg = resp.get("message", "")
+                    if status == "ok":
+                        self.notifications.put(msg)
+                    elif status == "error":
+                        self.notifications.put(f"Error: {msg}")
+                        messagebox.showerror("Error", msg)
+                    elif status == "exit":
+                        self.notifications.put(msg)
                     else:
                         self.notifications.put(str(resp))
+                else:
+                    self.notifications.put(str(resp))
             except Exception:
                 pass
             time.sleep(0.05)
@@ -626,7 +616,6 @@ class ChatUI:
 
             try:
                 # Xử lý các response còn lại trong response_queue (nếu có)
-                temp_queue = []
                 while not self.response_queue.empty():
                     resp = self.response_queue.get_nowait()
                     # --- BẮT THÔNG BÁO TẠO KÊNH TỪ PEER KHÁC ---
@@ -637,23 +626,8 @@ class ChatUI:
                         if peer_username and channel_name and peer_username != self.username:
                             self.notifications.put(f"Người dùng '{peer_username}' đã tạo hoặc tham gia kênh '{channel_name}'.")
                             self.refresh_channels()
-                        # Không đưa vào temp_queue để tránh xử lý lại
                         continue
-                    # --- Xử lý response tự động (auto) ---
-                    if isinstance(resp, dict) and resp.get("auto", False):
-                        if "status_value" in resp:
-                            prev_status = self.status
-                            self.status = resp["status_value"]
-                            # Luôn cập nhật label nếu status thay đổi
-                            if self.status != prev_status:
-                                self.update_status_label()
-                            # Nếu status không đổi, vẫn nên cập nhật label để đảm bảo đồng bộ
-                            else:
-                                self.update_status_label()
-                    else:
-                        temp_queue.append(resp)
-                for resp in temp_queue:
-                    self.response_queue.put(resp)
+
             except Exception:
                 break  # UI đã bị destroy
 

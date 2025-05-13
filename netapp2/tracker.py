@@ -190,6 +190,28 @@ def check_peer_status(peer):
     except Exception:
         return False  # Peer offline
 
+def _notify_peers_status_update_worker(changed_peer):
+    notification = json.dumps({
+        "type": "status_update",
+        "username": changed_peer.username,
+        "status": changed_peer.status
+    }).encode() + b'\n'
+    with peer_lock:
+        for peer in peer_list:
+            if peer.username != changed_peer.username and peer.status in ("online", "invisible"):
+                try:
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    s.settimeout(2)
+                    s.connect((peer.ip, int(peer.port)))
+                    s.send(notification)
+                    s.close()
+                except Exception:
+                    pass  # Không cần log lỗi ở đây để tránh spam log
+
+def notify_peers_status_update(changed_peer):
+    """Gửi thông báo trạng thái mới của peer đến các peer khác đang online trong một thread riêng"""
+    threading.Thread(target=_notify_peers_status_update_worker, args=(changed_peer,), daemon=True).start()
+
 def update_peer_status():
     """Cập nhật trạng thái của tất cả các peer theo định kỳ"""
     while True:
@@ -206,13 +228,15 @@ def update_peer_status():
                             if not is_online and peer.status != "offline":
                                 logging.info(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is now offline")
                                 peer.status = "offline"
+                                notify_peers_status_update(peer)
                             elif is_online and peer.status == "offline":
                                 logging.info(f"[Tracker] Peer {peer.username} ({peer.ip}:{peer.port}) is back online")
                                 peer.status = "online"
                                 peer.update_last_seen()
+                                notify_peers_status_update(peer)
                         
-                        # Xóa các peer không còn hoạt động sau một thời gian rất dài (1 giờ)
-                        if (datetime.now() - peer.last_seen).total_seconds() > 3600 and peer.status == "offline":
+                        # Xóa các peer không còn hoạt động sau một thời gian rất dài (3 phút)
+                        if (datetime.now() - peer.last_seen).total_seconds() > 300 and peer.status == "offline":
                             offline_peers.append(i)
                 
                 # Xóa các peer đã offline quá lâu (từ cuối danh sách để tránh lỗi index)
@@ -293,21 +317,22 @@ def handle_client(conn):
                                 p.username = username
                             
                             # Nếu trạng thái là offline, cập nhật ngay lập tức
+                            old_status = p.status
                             if status == "offline":
                                 p.status = "offline"
                                 logging.info(f"[Tracker] Peer {username} at {ip}:{port} set to offline by client exit")
-                            # Chỉ cập nhật trạng thái nếu peer đã đăng ký là trạng thái khác "offline"
-                            # hoặc nếu trạng thái mới là "online" (peer đang báo là đã online lại)
                             elif status != "offline" or p.status == "offline":
                                 p.status = status
-                            
                             p.update_last_seen()
                             logging.info(f"[Tracker] Updated peer {username} at {ip}:{port} with status {p.status}")
+                            if old_status != p.status:
+                                notify_peers_status_update(p)
                             break
                     else:
                         # Peer mới
                         peer_list.append(new_peer)
                         logging.info(f"[Tracker] Registered new peer {username} at {ip}:{port} with status {status}")
+                        notify_peers_status_update(new_peer)
                 
                 if get_peers:
                     # Trả về danh sách peers ngay lập tức

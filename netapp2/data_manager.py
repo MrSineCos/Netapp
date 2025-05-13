@@ -364,7 +364,7 @@ class DataManager:
             traceback.print_exc()
             return None
             
-    def get_channel(self, channel_name):
+    def get_channel(self, channel_name) -> Channel:
         """Get a channel by name, loading from disk if needed"""
         try:
             logger.info(f"[DataManager] Getting channel {channel_name}")

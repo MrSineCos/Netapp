@@ -623,7 +623,7 @@ class Agent:
                     logging.info(f"[Agent] Listing peers: {peers}")
                     for peer in peers:
                         status_icon = "🟢" if peer.get("status") == "online" else "🔴" if peer.get("status") == "offline" else "⚪"
-                        logging.info(f"[Agent] {peer.get('username')} ({peer.get('ip')}:{peer.get('port')})")
+                        logging.info(f"{status_icon} {peer.get('username')} ({peer.get('ip')}:{peer.get('port')})")
                     response = {
                         "status": "ok",
                         "message": "Listed peers",
@@ -757,6 +757,16 @@ class Agent:
 
             elif action == "status" and params:
                 print(f"[Agent] [handle_command] Handling status: {params}")
+                if params.strip().lower() == "check":
+                    is_online = self.check_online_status()
+                    response = {
+                        "status": "ok",
+                        "message": f"Agent is {'online' if is_online else 'offline'} with tracker",
+                        "username": self.username,
+                        "status_value": self.status
+                    }
+                    return response
+                
                 if params.startswith("check "):
                     target_username = params.split(' ', 1)[1].strip()
                     status = self.check_peer_status(target_username)
@@ -1343,9 +1353,7 @@ def agent_main(command_queue: Queue, my_port: int, username: str = "", status: s
                 logging.info(f"[Agent] Received command: {cmd}")
                 
                 result = agent.handle_command(cmd)
-                
-                if response_queue:
-                    response_queue.put(result)
+                response_queue.put(result)
                 
                 if result["status"] == "exit":
                     running = False
@@ -1366,19 +1374,13 @@ def agent_main(command_queue: Queue, my_port: int, username: str = "", status: s
                     if agent.status == "offline":
                         logging.info("[Agent] Updating status from offline to online")
                         result = agent.handle_command("status online")
-                        if response_queue:
-                            if isinstance(result, dict):
-                                result["auto"] = True
-                            response_queue.put(result)
+                        response_queue.put(result)
                         agent.register_to_tracker()
                     agent.sync_all(sync_type="reconnect")
                 elif tracker_connected and not current_connection:
                     logging.warning("[Agent] Lost connection to tracker!")
                     result = agent.handle_command("status offline")
-                    if response_queue:
-                        if isinstance(result, dict):
-                            result["auto"] = True
-                        response_queue.put(result)
+                    response_queue.put(result)
                 tracker_connected = current_connection
         
             if agent._auto_sync and current_time - last_auto_sync > 60 and agent.status != "offline" and agent.is_authenticated and tracker_connected:
